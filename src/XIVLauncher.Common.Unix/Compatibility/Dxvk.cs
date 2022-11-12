@@ -8,8 +8,8 @@ namespace XIVLauncher.Common.Unix.Compatibility;
 
 public static class Dxvk
 {
-    private const string DXVK_DOWNLOAD = "https://github.com/Sporif/dxvk-async/releases/download/1.10.1/dxvk-async-1.10.1.tar.gz";
-    private const string DXVK_NAME = "dxvk-async-1.10.1";
+    private const string DXVK_DOWNLOAD = "https://github.com/Sporif/dxvk-async/releases/download/2.0/dxvk-async-2.0.tar.gz";
+    private const string DXVK_NAME = "dxvk-async-2.0";
 
     public static async Task InstallDxvk(DirectoryInfo prefix, DirectoryInfo installDirectory)
     {
