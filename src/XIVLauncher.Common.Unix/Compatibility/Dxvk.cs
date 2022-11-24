@@ -10,28 +10,31 @@ public static class Dxvk
 {
     private static string DXVK_DOWNLOAD = "https://github.com/Sporif/dxvk-async/releases/download/1.10.1/dxvk-async-1.10.1.tar.gz";
     private static string DXVK_NAME = "dxvk-async-1.10.1";
-    
     private static string DXVK_VERSION = "1.10.1";
-    public static string Version
+    private static DxvkVersion version = Dxvk.DxvkVersion.v1_10_1;
+    
+    public static DxvkVersion Version
     {
-        get { return DXVK_VERSION; }
+        get { return version; }
         set
         {
             switch (value)
             {
-                case "2.0":
+                case DxvkVersion.v2_0:
                     DXVK_VERSION = "2.0";
                     break;
-                case "1.10.3":
+                case DxvkVersion.v1_10_3:
                     DXVK_VERSION = "1.10.3";
                     break;
-                case "1.10.2":
+                case DxvkVersion.v1_10_2:
                     DXVK_VERSION = "1.10.2";
                     break;
                 default:
+                    value = DxvkVersion.v1_10_1;
                     DXVK_VERSION = "1.10.1";
                     break;
             }
+            version = value;
             DXVK_NAME = $"dxvk-async-{DXVK_VERSION}";
             DXVK_DOWNLOAD = $"https://github.com/Sporif/dxvk-async/releases/download/{DXVK_VERSION}/{DXVK_NAME}.tar.gz";
         }
@@ -77,5 +80,20 @@ public static class Dxvk
 
         [SettingsDescription("Full", "Show everything")]
         Full,
+    }
+
+    public enum DxvkVersion
+    {
+        [SettingsDescription("1.10.1 (default)", "The default version of DXVK used with XIVLauncher.Core.")]
+        v1_10_1,
+
+        [SettingsDescription("1.10.2", "Newer version of 1.10 branch of DXVK. Probably works.")]
+        v1_10_2,
+
+       [SettingsDescription("1.10.3", "Newest version of 1.10 branch of DXVK. Probably works.")]
+        v1_10_3,
+
+       [SettingsDescription("2.0 (unsafe)", "New 2.0 version of DXVK. Might break Dalamud or GShade.")]
+        v2_0,
     }
 }
