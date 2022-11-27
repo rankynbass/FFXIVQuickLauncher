@@ -1,6 +1,7 @@
 ﻿using System.IO;
 using System.Net.Http;
 using System.Threading.Tasks;
+using System.Collections.Generic;
 using Serilog;
 using XIVLauncher.Common.Util;
 
@@ -8,41 +9,13 @@ namespace XIVLauncher.Common.Unix.Compatibility;
 
 public static class Dxvk
 {
-    private static string DXVK_DOWNLOAD = "https://github.com/Sporif/dxvk-async/releases/download/1.10.1/dxvk-async-1.10.1.tar.gz";
-    private static string DXVK_NAME = "dxvk-async-1.10.1";
-    private static string DXVK_VERSION = "1.10.1";
-    private static DxvkVersion version = Dxvk.DxvkVersion.v1_10_1;
+    private const string DXVK_DOWNLOAD = "https://github.com/Sporif/dxvk-async/releases/download/1.10.1/dxvk-async-1.10.1.tar.gz";
+    private const string DXVK_NAME = "dxvk-async-1.10.1";
+    public static DxvkVersion Version { get; set; } = DxvkVersion.v1_10_1;
     
-    public static DxvkVersion Version
-    {
-        get { return version; }
-        set
-        {
-            switch (value)
-            {
-                case DxvkVersion.v2_0:
-                    DXVK_VERSION = "2.0";
-                    break;
-                case DxvkVersion.v1_10_3:
-                    DXVK_VERSION = "1.10.3";
-                    break;
-                case DxvkVersion.v1_10_2:
-                    DXVK_VERSION = "1.10.2";
-                    break;
-                default:
-                    value = DxvkVersion.v1_10_1;
-                    DXVK_VERSION = "1.10.1";
-                    break;
-            }
-            version = value;
-            DXVK_NAME = $"dxvk-async-{DXVK_VERSION}";
-            DXVK_DOWNLOAD = $"https://github.com/Sporif/dxvk-async/releases/download/{DXVK_VERSION}/{DXVK_NAME}.tar.gz";
-        }
-    }
-
     public static async Task InstallDxvk(DirectoryInfo prefix, DirectoryInfo installDirectory)
     {
-        var dxvkPath = Path.Combine(installDirectory.FullName, DXVK_NAME, "x64");
+        var dxvkPath = Path.Combine(installDirectory.FullName, Version.Folder ?? DXVK_NAME, "x64");
 
         if (!Directory.Exists(dxvkPath))
         {
@@ -64,7 +37,7 @@ public static class Dxvk
         using var client = new HttpClient();
         var tempPath = Path.GetTempFileName();
 
-        File.WriteAllBytes(tempPath, await client.GetByteArrayAsync(DXVK_DOWNLOAD));
+        File.WriteAllBytes(tempPath, await client.GetByteArrayAsync(Version.Download ?? DXVK_DOWNLOAD));
         PlatformHelpers.Untar(tempPath, installDirectory.FullName);
 
         File.Delete(tempPath);
@@ -81,19 +54,37 @@ public static class Dxvk
         [SettingsDescription("Full", "Show everything")]
         Full,
     }
+}
 
-    public enum DxvkVersion
+public class DxvkVersion
+{
+    // This must appear above all the other static instances
+    public static List<DxvkVersion> AllVersions { get; } = new List<DxvkVersion>();
+
+    // "Enum" entries go here.
+    [SettingsDescription("1.10.1 (default)", "The default version of DXVK used with XIVLauncher.Core.")]
+    public static DxvkVersion v1_10_1 {get;} = new DxvkVersion(0, "1.10.1");
+
+    [SettingsDescription("1.10.2", "Newer version of 1.10 branch of DXVK. Probably works.")]
+    public static DxvkVersion v1_10_2 {get;} = new DxvkVersion(1, "1.10.2");
+
+    [SettingsDescription("1.10.3", "Newest version of 1.10 branch of DXVK. Probably works.")]
+    public static DxvkVersion v1_10_3 {get;} = new DxvkVersion(2, "1.10.3");
+
+    [SettingsDescription("2.0 (unsafe)", "New 2.0 version of DXVK. Might break Dalamud or GShade.")]
+    public static DxvkVersion v2_0 {get;} = new DxvkVersion(3, "2.0");
+
+    // The rest of the class to make it act like an Enum
+    public int Value {get; private set; }
+    public string Name { get; private set; }
+    public string Folder { get; private set; }
+    public string Download {get; private set; }
+
+    private DxvkVersion(int val, string name, string? folder = null, string? download = null)
     {
-        [SettingsDescription("1.10.1 (default)", "The default version of DXVK used with XIVLauncher.Core.")]
-        v1_10_1,
-
-        [SettingsDescription("1.10.2", "Newer version of 1.10 branch of DXVK. Probably works.")]
-        v1_10_2,
-
-       [SettingsDescription("1.10.3", "Newest version of 1.10 branch of DXVK. Probably works.")]
-        v1_10_3,
-
-       [SettingsDescription("2.0 (unsafe)", "New 2.0 version of DXVK. Might break Dalamud or GShade.")]
-        v2_0,
+        Value = val;
+        Name = name;
+        Folder ??= $"dxvk-async-{name}";
+        Download ??= $"https://github.com/Sporif/dxvk-async/releases/download/{name}/dxvk-async-{name}.tar.gz";
     }
 }
