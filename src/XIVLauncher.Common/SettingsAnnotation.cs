@@ -2,7 +2,7 @@ using System;
 
 namespace XIVLauncher.Common;
 
-[AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
+[AttributeUsage(AttributeTargets.Field)]
 public class SettingsDescriptionAttribute : Attribute
 {
     public string FriendlyName { get; set; }
