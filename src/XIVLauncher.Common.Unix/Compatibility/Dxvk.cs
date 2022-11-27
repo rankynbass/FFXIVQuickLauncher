@@ -1,7 +1,7 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 using System.Net.Http;
 using System.Threading.Tasks;
-using System.Collections.Generic;
 using Serilog;
 using XIVLauncher.Common.Util;
 
@@ -64,7 +64,7 @@ public static class Dxvk
             DxvkVersion.v1_10_2 => "1.10.2",
             DxvkVersion.v1_10_3 => "1.10.3",
             DxvkVersion.v2_0 => "2.0",
-            _ => "1.10.1",
+            _ => throw new ArgumentOutOfRangeException(),
         };
         DXVK_NAME = $"dxvk-async-{DXVK_VERSION}";
         DXVK_DOWNLOAD = $"https://github.com/Sporif/dxvk-async/releases/download/{DXVK_VERSION}/{DXVK_NAME}.tar.gz";
