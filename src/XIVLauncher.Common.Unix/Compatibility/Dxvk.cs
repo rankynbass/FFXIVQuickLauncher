@@ -82,6 +82,6 @@ public enum DxvkVersion
     [SettingsDescription("1.10.3", "Newer version of 1.10 branch of DXVK. Probably works.")]
     v1_10_3,
 
-    [SettingsDescription("1.10.3", "Newest version of 1.https://github.com/Sporif/dxvk-async/releases/download/1.10.1/dxvk-async-1.10.1.tar.gzon of DXVK. Might break Dalamud or GShade.")]
+    [SettingsDescription("2.0 (might break Dalamud, GShade)", "Newest version of DXVK. Might break Dalamud or GShade.")]
     v2_0,
 }
