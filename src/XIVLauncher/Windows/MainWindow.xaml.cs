@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -21,6 +22,7 @@ using XIVLauncher.Common.Game.Patch.Acquisition;
 using XIVLauncher.Common.Util;
 using XIVLauncher.Support;
 using XIVLauncher.Windows.ViewModel;
+using XIVLauncher.Xaml;
 using Timer = System.Timers.Timer;
 
 namespace XIVLauncher.Windows
@@ -118,7 +120,7 @@ namespace XIVLauncher.Windows
             {
                 _bannerChangeTimer?.Stop();
 
-                _headlines = await Headlines.Get(_launcher, App.Settings.Language.GetValueOrDefault(ClientLanguage.English));
+                _headlines = await Headlines.Get(_launcher, App.Settings.Language.GetValueOrDefault(ClientLanguage.English), App.Settings.ForceNorthAmerica.GetValueOrDefault(false)).ConfigureAwait(false);
 
                 _bannerBitmaps = new BitmapImage[_headlines.Banner.Length];
                 _bannerDotList = new();
@@ -208,6 +210,10 @@ namespace XIVLauncher.Windows
             App.Settings.ExitLauncherAfterGameExit ??= true;
 
             App.Settings.IsFt ??= false;
+
+            App.Settings.AutoStartSteam ??= false;
+
+            App.Settings.ForceNorthAmerica ??= false;
 
             var versionLevel = App.Settings.VersionUpgradeLevel.GetValueOrDefault(0);
 
@@ -583,6 +589,35 @@ namespace XIVLauncher.Windows
         private void RadioButton_MouseLeave(object sender, MouseEventArgs e)
         {
             _bannerChangeTimer.Start();
+        }
+
+        private void SettingsControl_OnCloseMainWindowGracefully(object sender, EventArgs e)
+        {
+            Close();
+        }
+
+        private void MainWindow_OnClosing(object sender, CancelEventArgs e)
+        {
+            try
+            {
+                PreserveWindowPosition.SaveWindowPosition(this);
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Couldn't save window position");
+            }
+        }
+
+        protected override void OnSourceInitialized(EventArgs e)
+        {
+            try
+            {
+                PreserveWindowPosition.RestorePosition(this);
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Couldn't restore window position");
+            }
         }
     }
 }
