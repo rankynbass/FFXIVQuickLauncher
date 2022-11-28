@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 using System.Net.Http;
 using System.Threading.Tasks;
 using Serilog;
@@ -8,11 +9,13 @@ namespace XIVLauncher.Common.Unix.Compatibility;
 
 public static class Dxvk
 {
-    private const string DXVK_DOWNLOAD = "https://github.com/Sporif/dxvk-async/releases/download/1.10.1/dxvk-async-1.10.1.tar.gz";
-    private const string DXVK_NAME = "dxvk-async-1.10.1";
+    private static string DXVK_DOWNLOAD = "https://github.com/Sporif/dxvk-async/releases/download/1.10.1/dxvk-async-1.10.1.tar.gz";
+    private static string DXVK_NAME = "dxvk-async-1.10.1";
+    public static DxvkVersion Version { get; set; } = DxvkVersion.v1_10_1;
 
     public static async Task InstallDxvk(DirectoryInfo prefix, DirectoryInfo installDirectory)
     {
+        SetDxvkVersion();
         var dxvkPath = Path.Combine(installDirectory.FullName, DXVK_NAME, "x64");
 
         if (!Directory.Exists(dxvkPath))
@@ -52,4 +55,33 @@ public static class Dxvk
         [SettingsDescription("Full", "Show everything")]
         Full,
     }
+
+    private static void SetDxvkVersion()
+    {
+        string DXVK_VERSION = Version switch
+        {
+            DxvkVersion.v1_10_1 => "1.10.1",
+            DxvkVersion.v1_10_2 => "1.10.2",
+            DxvkVersion.v1_10_3 => "1.10.3",
+            DxvkVersion.v2_0 => "2.0",
+            _ => throw new ArgumentOutOfRangeException(),
+        };
+        DXVK_NAME = $"dxvk-async-{DXVK_VERSION}";
+        DXVK_DOWNLOAD = $"https://github.com/Sporif/dxvk-async/releases/download/{DXVK_VERSION}/{DXVK_NAME}.tar.gz";
+    }
+}
+
+public enum DxvkVersion
+{
+    [SettingsDescription("1.10.1 (default)", "The default version of DXVK used with XIVLauncher.Core.")]
+    v1_10_1,
+
+    [SettingsDescription("1.10.2", "Newer version of 1.10 branch of DXVK. Probably works.")]
+    v1_10_2,
+
+    [SettingsDescription("1.10.3", "Newer version of 1.10 branch of DXVK. Probably works.")]
+    v1_10_3,
+
+    [SettingsDescription("2.0 (might break Dalamud, GShade)", "Newest version of DXVK. Might break Dalamud or GShade.")]
+    v2_0,
 }
