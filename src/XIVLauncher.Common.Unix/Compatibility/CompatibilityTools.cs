@@ -170,20 +170,53 @@ public class CompatibilityTools
         wineEnviromentVariables.Add("XL_WINEONLINUX", "true");
         string ldPreload = Environment.GetEnvironmentVariable("LD_PRELOAD") ?? "";
 
-        string dxvkHud = hudType switch
+        string dxvkHud = "0";
+        string mangoHud = "0";
+        bool useOverlayVars = true;
+        bool mangoFull = false;
+        switch(hudType)
         {
-            Dxvk.DxvkHudType.None => "0",
-            Dxvk.DxvkHudType.Fps => "fps",
-            Dxvk.DxvkHudType.Full => "full",
-            _ => throw new ArgumentOutOfRangeException()
-        };
+            // Just pass through default values. Overlays cannot be turned on by user env variables.
+            case Dxvk.DxvkHudType.Off:
+                break;
+            // Don't set ENV vars. Allows user to pass through ENV vars manually from terminal/script.
+            case Dxvk.DxvkHudType.None:
+                useOverlayVars = false;
+                break;
+            case Dxvk.DxvkHudType.Fps:
+                dxvkHud = "fps";
+                break;
+            case Dxvk.DxvkHudType.Full:
+                dxvkHud = "full";
+                break;
+            case Dxvk.DxvkHudType.MangoHud:
+                mangoHud = "1";
+                break;
+            case Dxvk.DxvkHudType.MangoHudFull:
+                mangoHud = "1";
+                mangoFull = true;
+                break;
+            // Just in case, don't set any env variables.
+            default:
+                useOverlayVars = false;
+                mangoFull = false;
+                break;
+        }
 
         if (this.gamemodeOn == true && !ldPreload.Contains("libgamemodeauto.so.0"))
         {
             ldPreload = ldPreload.Equals("") ? "libgamemodeauto.so.0" : ldPreload + ":libgamemodeauto.so.0";
         }
 
-        wineEnviromentVariables.Add("DXVK_HUD", dxvkHud);
+        if (useOverlayVars)
+        {
+            wineEnviromentVariables.Add("DXVK_HUD", dxvkHud);
+            wineEnviromentVariables.Add("MANGOHUD", mangoHud);
+        }
+        if (mangoFull)
+        {
+            wineEnviromentVariables.Add("MANGOHUD_CONFIG","full");
+        }
         wineEnviromentVariables.Add("DXVK_ASYNC", dxvkAsyncOn);
         wineEnviromentVariables.Add("WINEESYNC", Settings.EsyncOn);
         wineEnviromentVariables.Add("WINEFSYNC", Settings.FsyncOn);

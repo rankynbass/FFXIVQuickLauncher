@@ -46,14 +46,23 @@ public static class Dxvk
 
     public enum DxvkHudType
     {
-        [SettingsDescription("None", "Show nothing")]
+        [SettingsDescription("None", "Completely disable DXVK Hud and MangoHud")]
+        Off,
+
+        [SettingsDescription("Manual", "User must set their own environment variables.")]
         None,
 
-        [SettingsDescription("FPS", "Only show FPS")]
+        [SettingsDescription("DXVK Hud FPS", "Only show FPS")]
         Fps,
 
-        [SettingsDescription("Full", "Show everything")]
+        [SettingsDescription("DXVK Hud Full", "Show everything")]
         Full,
+
+        [SettingsDescription("MangoHud", "Uses ~/.config/MangoHud/wine-ffxiv_dx11.conf if present")]
+        MangoHud,
+
+        [SettingsDescription("MangoHud Full", "Show (almost) everything")]
+        MangoHudFull,
     }
 
     private static void SetDxvkVersion()
@@ -82,6 +91,6 @@ public enum DxvkVersion
     [SettingsDescription("1.10.3", "Newer version of 1.10 branch of DXVK. Probably works.")]
     v1_10_3,
 
-    [SettingsDescription("2.0 (might break Dalamud, GShade)", "Newest version of DXVK. Might break Dalamud or GShade.")]
+    [SettingsDescription("2.0 (unstable)", "Newest version of DXVK. Might break Dalamud or GShade.")]
     v2_0,
 }
