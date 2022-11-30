@@ -172,11 +172,16 @@ public class CompatibilityTools
 
         string dxvkHud = "0";
         string mangoHud = "0";
+        bool useOverlayVars = true;
         bool mangoFull = false;
         switch(hudType)
         {
+            // Just pass through default values. Overlays cannot be turned on by user env variables.
+            case Dxvk.DxvkHudType.Off:
+                break;
+            // Don't set ENV vars. Allows user to pass through ENV vars manually from terminal/script.
             case Dxvk.DxvkHudType.None:
-                // Do nothing, already set.
+                useOverlayVars = false;
                 break;
             case Dxvk.DxvkHudType.Fps:
                 dxvkHud = "fps";
@@ -184,17 +189,16 @@ public class CompatibilityTools
             case Dxvk.DxvkHudType.Full:
                 dxvkHud = "full";
                 break;
-            case Dxvk.DxvkHudType.Mango:
+            case Dxvk.DxvkHudType.MangoHud:
                 mangoHud = "1";
                 break;
-            case Dxvk.DxvkHudType.MangoFull:
+            case Dxvk.DxvkHudType.MangoHudFull:
                 mangoHud = "1";
                 mangoFull = true;
                 break;
+            // Just in case, don't set any env variables.
             default:
-                // Just in case
-                dxvkHud = "0";
-                mangoHud = "0";
+                useOverlayVars = false;
                 mangoFull = false;
                 break;
         }
@@ -204,8 +208,11 @@ public class CompatibilityTools
             ldPreload = ldPreload.Equals("") ? "libgamemodeauto.so.0" : ldPreload + ":libgamemodeauto.so.0";
         }
 
-        wineEnviromentVariables.Add("DXVK_HUD", dxvkHud);
-        wineEnviromentVariables.Add("MANGOHUD", mangoHud);
+        if (useOverlayVars)
+        {
+            wineEnviromentVariables.Add("DXVK_HUD", dxvkHud);
+            wineEnviromentVariables.Add("MANGOHUD", mangoHud);
+        }
         if (mangoFull)
         {
             wineEnviromentVariables.Add("MANGOHUD_CONFIG","full");
