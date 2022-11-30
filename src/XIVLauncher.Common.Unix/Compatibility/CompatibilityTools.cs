@@ -170,13 +170,34 @@ public class CompatibilityTools
         wineEnviromentVariables.Add("XL_WINEONLINUX", "true");
         string ldPreload = Environment.GetEnvironmentVariable("LD_PRELOAD") ?? "";
 
-        string dxvkHud = hudType switch
+        string dxvkHud = "0";
+        string mangoHud = "0";
+        bool mangoFull = false;
+        switch(hudType)
         {
-            Dxvk.DxvkHudType.None => "0",
-            Dxvk.DxvkHudType.Fps => "fps",
-            Dxvk.DxvkHudType.Full => "full",
-            _ => throw new ArgumentOutOfRangeException()
-        };
+            case Dxvk.DxvkHudType.None:
+                // Do nothing, already set.
+                break;
+            case Dxvk.DxvkHudType.Fps:
+                dxvkHud = "fps";
+                break;
+            case Dxvk.DxvkHudType.Full:
+                dxvkHud = "full";
+                break;
+            case Dxvk.DxvkHudType.Mango:
+                mangoHud = "1";
+                break;
+            case Dxvk.DxvkHudType.MangoFull:
+                mangoHud = "1";
+                mangoFull = true;
+                break;
+            default:
+                // Just in case
+                dxvkHud = "0";
+                mangoHud = "0";
+                mangoFull = false;
+                break;
+        }
 
         if (this.gamemodeOn == true && !ldPreload.Contains("libgamemodeauto.so.0"))
         {
@@ -184,6 +205,11 @@ public class CompatibilityTools
         }
 
         wineEnviromentVariables.Add("DXVK_HUD", dxvkHud);
+        wineEnviromentVariables.Add("MANGOHUD", mangoHud);
+        if (mangoFull)
+        {
+            wineEnviromentVariables.Add("MANGOHUD_CONFIG","full");
+        }
         wineEnviromentVariables.Add("DXVK_ASYNC", dxvkAsyncOn);
         wineEnviromentVariables.Add("WINEESYNC", Settings.EsyncOn);
         wineEnviromentVariables.Add("WINEFSYNC", Settings.FsyncOn);

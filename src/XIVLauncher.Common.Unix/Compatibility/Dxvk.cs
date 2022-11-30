@@ -46,14 +46,20 @@ public static class Dxvk
 
     public enum DxvkHudType
     {
-        [SettingsDescription("None", "Show nothing")]
+        [SettingsDescription("No Overlay", "Show nothing")]
         None,
 
-        [SettingsDescription("FPS", "Only show FPS")]
+        [SettingsDescription("DxvkHud FPS", "Only show FPS")]
         Fps,
 
-        [SettingsDescription("Full", "Show everything")]
+        [SettingsDescription("DxvkHud Full", "Show everything")]
         Full,
+
+        [SettingsDescription("MangoHud Default", "Uses ~/.config/MangoHud/wine-ffxiv_dx11.conf if present")]
+        Mango,
+
+        [SettingsDescription("MangoHud Full", "Show (almost) everything")]
+        MangoFull,
     }
 
     private static void SetDxvkVersion()
