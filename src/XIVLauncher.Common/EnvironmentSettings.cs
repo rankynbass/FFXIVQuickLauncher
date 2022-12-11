@@ -10,10 +10,10 @@
         public static bool IsIgnoreSpaceRequirements => CheckEnvBool("XL_NO_SPACE_REQUIREMENTS");
         public static bool IsOpenSteamMinimal => CheckEnvBool("XL_OPEN_STEAM_MINIMAL");
         public static bool IsWineD3D => CheckEnvBool("XL_FORCE_WINED3D");
-        private static bool CheckEnvBool(string var)
+        private static bool CheckEnvBool(string env)
         {
-            var = (System.Environment.GetEnvironmentVariable(var) ?? "false").ToLower();
-            return (var.Equals("1") || var.Equals("true") || var.Equals("on") || var.Equals("yes"));
+            env = (System.Environment.GetEnvironmentVariable(env) ?? "false").ToLower();
+            return (env.Equals("1") || env.Equals("true") || env.Equals("on") || env.Equals("yes"));
         }
     }
 }

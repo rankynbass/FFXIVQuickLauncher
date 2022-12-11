@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 using System.Net.Http;
 using System.Threading.Tasks;
 using Serilog;
@@ -44,16 +45,16 @@ public static class Dxvk
         [SettingsDescription("None", "Show nothing")]
         None,
 
-        [SettingsDescription("FPS", "Only show FPS")]
+        [SettingsDescription("DXVK Hud FPS", "Only show FPS")]
         Fps,
 
         [SettingsDescription("DXVK Hud Custom", "Use a custom DXVK_HUD string")]
         Custom,
 
-        [SettingsDescription("Full", "Show everything")]
+        [SettingsDescription("DXVK Hud Full", "Show everything")]
         Full,
 
-        [SettingsDescription("MangoHud Default", "Uses no config file.")]
+        [SettingsDescription("MangoHud Default", "Uses no config or config file.")]
         MangoHud,
 
         [SettingsDescription("MangoHud Custom", "Specify a custom config file")]
