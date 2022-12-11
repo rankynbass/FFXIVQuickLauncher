@@ -151,6 +151,8 @@ public class CompatibilityTools
         psi.UseShellExecute = false;
         psi.WorkingDirectory = workingDirectory;
 
+        if (EnvironmentSettings.IsWineD3D) wineD3D = true;
+
         var wineEnviromentVariables = new Dictionary<string, string>();
         wineEnviromentVariables.Add("WINEPREFIX", Settings.Prefix.FullName);
         wineEnviromentVariables.Add("WINEDLLOVERRIDES", $"msquic=,mscoree=n,b;d3d9,d3d11,d3d10core,dxgi={(wineD3D ? "b" : "n")}");
