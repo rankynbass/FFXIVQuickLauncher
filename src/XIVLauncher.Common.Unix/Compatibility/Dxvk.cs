@@ -9,19 +9,15 @@ namespace XIVLauncher.Common.Unix.Compatibility;
 
 public static class Dxvk
 {
-    private static string DXVK_DOWNLOAD = "https://github.com/Sporif/dxvk-async/releases/download/1.10.1/dxvk-async-1.10.1.tar.gz";
-    private static string DXVK_NAME = "dxvk-async-1.10.1";
-    public static DxvkVersion Version { get; set; } = DxvkVersion.v1_10_1;
-
-    public static async Task InstallDxvk(DirectoryInfo prefix, DirectoryInfo installDirectory)
+    public static async Task InstallDxvk(DirectoryInfo prefix, DirectoryInfo installDirectory, DxvkSettings? dxvkSettings = null)
     {
-        SetDxvkVersion();
-        var dxvkPath = Path.Combine(installDirectory.FullName, DXVK_NAME, "x64");
+        dxvkSettings ??= new DxvkSettings();
+        var dxvkPath = Path.Combine(installDirectory.FullName, dxvkSettings.FolderName, "x64");
 
         if (!Directory.Exists(dxvkPath))
         {
             Log.Information("DXVK does not exist, downloading");
-            await DownloadDxvk(installDirectory).ConfigureAwait(false);
+            await DownloadDxvk(installDirectory, dxvkSettings.DownloadURL).ConfigureAwait(false);
         }
 
         var system32 = Path.Combine(prefix.FullName, "drive_c", "windows", "system32");
@@ -33,12 +29,12 @@ public static class Dxvk
         }
     }
 
-    private static async Task DownloadDxvk(DirectoryInfo installDirectory)
+    private static async Task DownloadDxvk(DirectoryInfo installDirectory, string downloadURL)
     {
         using var client = new HttpClient();
         var tempPath = Path.GetTempFileName();
 
-        File.WriteAllBytes(tempPath, await client.GetByteArrayAsync(DXVK_DOWNLOAD));
+        File.WriteAllBytes(tempPath, await client.GetByteArrayAsync(downloadURL));
         PlatformHelpers.Untar(tempPath, installDirectory.FullName);
 
         File.Delete(tempPath);
@@ -46,51 +42,40 @@ public static class Dxvk
 
     public enum DxvkHudType
     {
-        [SettingsDescription("None", "Completely disable DXVK Hud and MangoHud")]
-        Off,
-
-        [SettingsDescription("Manual", "User must set their own environment variables.")]
+        [SettingsDescription("None", "Show nothing")]
         None,
 
         [SettingsDescription("DXVK Hud FPS", "Only show FPS")]
         Fps,
 
+        [SettingsDescription("DXVK Hud Custom", "Use a custom DXVK_HUD string")]
+        Custom,
+
         [SettingsDescription("DXVK Hud Full", "Show everything")]
         Full,
 
-        [SettingsDescription("MangoHud", "Uses ~/.config/MangoHud/wine-ffxiv_dx11.conf if present")]
+        [SettingsDescription("MangoHud Default", "Uses no config or config file.")]
         MangoHud,
+
+        [SettingsDescription("MangoHud Custom", "Specify a custom config file")]
+        MangoHudCustom,
 
         [SettingsDescription("MangoHud Full", "Show (almost) everything")]
         MangoHudFull,
     }
 
-    private static void SetDxvkVersion()
+    public enum DxvkVersion
     {
-        string DXVK_VERSION = Version switch
-        {
-            DxvkVersion.v1_10_1 => "1.10.1",
-            DxvkVersion.v1_10_2 => "1.10.2",
-            DxvkVersion.v1_10_3 => "1.10.3",
-            DxvkVersion.v2_0 => "2.0",
-            _ => throw new ArgumentOutOfRangeException(),
-        };
-        DXVK_NAME = $"dxvk-async-{DXVK_VERSION}";
-        DXVK_DOWNLOAD = $"https://github.com/Sporif/dxvk-async/releases/download/{DXVK_VERSION}/{DXVK_NAME}.tar.gz";
+        [SettingsDescription("1.10.1 (default)", "The default version of DXVK used with XIVLauncher.Core.")]
+        v1_10_1,
+
+        [SettingsDescription("1.10.2", "Newer version of 1.10 branch of DXVK. Safe to use.")]
+        v1_10_2,
+
+        [SettingsDescription("1.10.3", "Newer version of 1.10 branch of DXVK. Safe to use.")]
+        v1_10_3,
+
+        [SettingsDescription("2.0 (might break Dalamud, GShade)", "Newest version of DXVK. May be faster, but not stable yet.")]
+        v2_0,
     }
-}
-
-public enum DxvkVersion
-{
-    [SettingsDescription("1.10.1 (default)", "The default version of DXVK used with XIVLauncher.Core.")]
-    v1_10_1,
-
-    [SettingsDescription("1.10.2", "Newer version of 1.10 branch of DXVK. Probably works.")]
-    v1_10_2,
-
-    [SettingsDescription("1.10.3", "Newer version of 1.10 branch of DXVK. Probably works.")]
-    v1_10_3,
-
-    [SettingsDescription("2.0 (unstable)", "Newest version of DXVK. Might break Dalamud or GShade.")]
-    v2_0,
 }
