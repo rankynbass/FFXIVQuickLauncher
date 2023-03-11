@@ -32,20 +32,21 @@ public class CompatibilityTools
     
     private string Wine64Path => Path.Combine(WineBinPath, "wine64");
     private string WineServerPath => Path.Combine(WineBinPath, "wineserver");
-    private string SteamPath => Settings.SteamPath;
-    private string ProtonPath => Path.Combine(Settings.ProtonPath,"proton");
 
     public bool IsToolDownloaded => File.Exists(Wine64Path) && Settings.Prefix.Exists;
 
+    public ProtonSettings Proton { get; private set; }
+    
     public DxvkSettings DxvkSettings { get; private set; }
 
     private readonly bool gamemodeOn;
 
-    public bool useProton => Settings.StartupType == WineStartupType.Proton;
+    public bool UseProton => Settings.StartupType == WineStartupType.Proton;
 
-    public CompatibilityTools(WineSettings wineSettings, DxvkSettings dxvkSettings, bool? gamemodeOn, DirectoryInfo toolsFolder)
+    public CompatibilityTools(WineSettings wineSettings, DxvkSettings dxvkSettings, ProtonSettings protonSettings, bool? gamemodeOn, DirectoryInfo toolsFolder)
     {
         this.Settings = wineSettings;
+        this.Proton = protonSettings;
         this.DxvkSettings = dxvkSettings;
         this.gamemodeOn = gamemodeOn ?? false;
         this.toolDirectory = new DirectoryInfo(Path.Combine(toolsFolder.FullName, "beta"));
@@ -53,7 +54,7 @@ public class CompatibilityTools
 
         this.logWriter = new StreamWriter(wineSettings.LogFile.FullName);
 
-        if (Settings.StartupType != WineStartupType.Custom && !useProton)
+        if (Settings.StartupType != WineStartupType.Custom && !UseProton)
         {
             if (!this.toolDirectory.Exists)
                 this.toolDirectory.Create();
@@ -62,13 +63,16 @@ public class CompatibilityTools
                 this.dxvkDirectory.Create();
         }
 
-        if (!Settings.Prefix.Exists) Settings.Prefix.Create();
-        if (!Settings.ProtonPrefix.Exists) Settings.ProtonPrefix.Create();
+        if (!wineSettings.Prefix.Exists)
+            wineSettings.Prefix.Create();
+        
+        if (!protonSettings.Prefix.Exists)
+            protonSettings.Prefix.Create();
     }
 
     public async Task EnsureTool(DirectoryInfo tempPath)
     {
-        if (!useProton)
+        if (!UseProton)
         {
             if (!File.Exists(Wine64Path))
             {
@@ -112,16 +116,37 @@ public class CompatibilityTools
 
     public void EnsurePrefix()
     {
-        RunInPrefix("cmd /c dir %userprofile%/Documents > nul").WaitForExit();
+        if (UseProton)
+            RunInMinProton("cmd /c dir %userprofile%/Documents > nul", verb: "run").WaitForExit();
+        else
+            RunInPrefix("cmd /c dir %userprofile%/Documents > nul").WaitForExit();
     }
 
-    public Process RunInPrefix(string command, string workingDirectory = "", IDictionary<string, string> environment = null, bool redirectOutput = false, bool writeLog = false, bool wineD3D = false)
+    public Process RunInMinProton(string command,bool wineD3D = false, string verb = "runinprefix")
+    {
+        var psi = new ProcessStartInfo(Proton.ProtonPath);
+        psi.RedirectStandardOutput = true;
+        psi.RedirectStandardError = true;
+        psi.UseShellExecute = false;
+        psi.EnvironmentVariables.Add("STEAM_COMPAT_DATA_PATH", Proton.Prefix.FullName);
+        psi.EnvironmentVariables.Add("STEAM_COMPAT_CLIENT_INSTALL_PATH", Proton.SteamRoot);
+        if (wineD3D)
+            psi.EnvironmentVariables.Add("PROTON_USE_WINED3D", "1");
+        psi.Arguments = verb + " " + command;
+
+        var minProton = new Process();
+        minProton.StartInfo = psi;
+        minProton.Start();
+        Log.Verbose($"Running minimal proton in prefix: {psi.FileName} {psi.Arguments}");
+        return minProton;
+    }
+    public Process RunInPrefix(string command, string workingDirectory = "", IDictionary<string, string> environment = null, bool redirectOutput = false, bool writeLog = false, bool wineD3D = false, bool inject = true, string verb = "runinprefix")
     {
         ProcessStartInfo psi;
-        if (useProton)
+        if (UseProton)
         {
-            psi = new ProcessStartInfo(ProtonPath);
-            psi.Arguments = "runinprefix " + command;
+            psi = new ProcessStartInfo(Proton.GetCommand(inject));
+            psi.Arguments = Proton.GetArguments(inject, verb) + " " + command;
         }
         else
         {
@@ -133,13 +158,15 @@ public class CompatibilityTools
         return RunInPrefix(psi, workingDirectory, environment, redirectOutput, writeLog, wineD3D);
     }
 
-    public Process RunInPrefix(string[] args, string workingDirectory = "", IDictionary<string, string> environment = null, bool redirectOutput = false, bool writeLog = false, bool wineD3D = false)
+    public Process RunInPrefix(string[] args, string workingDirectory = "", IDictionary<string, string> environment = null, bool redirectOutput = false, bool writeLog = false, bool wineD3D = false, bool inject = true, string verb = "runinprefix")
     {
         ProcessStartInfo psi;
-        if (useProton)
+        if (UseProton)
         {
-            psi = new ProcessStartInfo(ProtonPath);
-            psi.ArgumentList.Add("runinprefix");
+            psi = new ProcessStartInfo(Proton.GetCommand());
+            var protonargs = Proton.GetArgumentsAsArray(inject, verb);
+            foreach (var protonarg in protonargs)
+                psi.ArgumentList.Add(protonarg);
         }
         else
         {
@@ -148,7 +175,7 @@ public class CompatibilityTools
         foreach (var arg in args)
             psi.ArgumentList.Add(arg);
 
-        Log.Verbose("Running in prefix: {FileName} {Arguments}", psi.FileName, psi.ArgumentList.Aggregate(string.Empty, (a, b) => a + " " + b));
+        Log.Verbose("Running in prefix (by array): {FileName} {Arguments}", psi.FileName, string.Join(' ', psi.ArgumentList)); //psi.ArgumentList.Aggregate(string.Empty, (a, b) => a + " " + b));
         return RunInPrefix(psi, workingDirectory, environment, redirectOutput, writeLog, wineD3D);
     }
 
@@ -176,24 +203,37 @@ public class CompatibilityTools
         var wineEnviromentVariables = new Dictionary<string, string>();
         wineEnviromentVariables.Add("WINEDLLOVERRIDES", $"msquic=,mscoree=n,b;d3d9,d3d11,d3d10core,dxgi={(DxvkSettings.Enabled && !wineD3D ? "n" : "b")}");
 
-        if (useProton)
+        if (UseProton)
         {
-            wineEnviromentVariables.Add("STEAM_COMPAT_DATA_PATH", Settings.ProtonPrefix.FullName);
-            wineEnviromentVariables.Add("STEAM_COMPAT_CLIENT_INSTALL_PATH", SteamPath);
-            wineEnviromentVariables.Add("PROTON_LOG", "1");
-            wineEnviromentVariables.Add("PROTON_LOG_DIR", Path.Combine(Settings.ProtonPrefix.Parent.FullName, "logs"));
+            wineEnviromentVariables.Add("STEAM_COMPAT_DATA_PATH", Proton.Prefix.FullName);
+            wineEnviromentVariables.Add("STEAM_COMPAT_CLIENT_INSTALL_PATH", Proton.SteamRoot);
+            wineEnviromentVariables.Add("STEAM_COMPAT_APP_ID", Proton.SteamAppId);
+
+            string runPath = Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR");
+
+            // discord ipc paths
+            string discordIPCPaths = "";
+            for (int i = 0; i < 10; i++)
+                discordIPCPaths += $"{runPath}/discord-ipc-{i}:{runPath}/app/com.discordapp.Discord/discord-ipc-{i}:{runPath}/snap.discord-cananry/discord-ipc-{i}:";
+            string compatMounts = Environment.GetEnvironmentVariable("STEAM_COMPAT_MOUNTS") ?? "";
+            compatMounts = discordIPCPaths + Proton.CompatMounts + (compatMounts.Equals("") ? "" : ":" + compatMounts);
+            wineEnviromentVariables.Add("STEAM_COMPAT_MOUNTS", compatMounts);
+
+            Log.Information($"STEAM_COMPAT_MOUNTS={discordIPCPaths}");
+
+            wineEnviromentVariables.Add("PROTON_LOG_DIR", Path.Combine(Proton.Prefix.Parent.FullName, "logs"));
+
             foreach (KeyValuePair<string, string> dxvkVar in DxvkSettings.DxvkVars)
             {
                 
                 if (dxvkVar.Key == "DXVK_CONFIG_FILE")
-                    wineEnviromentVariables.Add(dxvkVar.Key, Path.Combine(Settings.ProtonPrefix.FullName,"dxvk.conf"));
+                    wineEnviromentVariables.Add(dxvkVar.Key, Path.Combine(Proton.Prefix.FullName,"dxvk.conf"));
                 else if (dxvkVar.Key == "DXVK_STATE_CACHE_PATH")
                 { } // Do nothing. Let Proton manage this.
                 else
                     wineEnviromentVariables.Add(dxvkVar.Key, dxvkVar.Value);
             }
             if (!Settings.FsyncOn) wineEnviromentVariables.Add("PROTON_NO_FSYNC", "1");
-            if (!Settings.EsyncOn && !Settings.FsyncOn) wineEnviromentVariables.Add("PROTON_NO_FSYNC", "1");
         }
         else
         {
@@ -241,44 +281,6 @@ public class CompatibilityTools
         }
 #endif
 
-        if (useProton)
-        {
-            ProcessStartInfo psifirstrun = new ProcessStartInfo(ProtonPath);
-            psifirstrun.RedirectStandardOutput = redirectOutput;
-            psifirstrun.RedirectStandardError = writeLog;
-            psifirstrun.UseShellExecute = false;
-            psifirstrun.WorkingDirectory = workingDirectory;
-            psifirstrun.ArgumentList.Add("run");
-
-            MergeDictionaries(psifirstrun.EnvironmentVariables, wineEnviromentVariables);
-            MergeDictionaries(psifirstrun.EnvironmentVariables, environment);
-
-            Process firstrun = new();
-            firstrun.StartInfo = psifirstrun;
-
-            firstrun.ErrorDataReceived += new DataReceivedEventHandler((_, errLine) =>
-            {
-                if (String.IsNullOrEmpty(errLine.Data))
-                    return;
-
-                try
-                {
-                    logWriter.WriteLine(errLine.Data);
-                    Console.Error.WriteLine(errLine.Data);
-                }
-                catch (Exception ex) when (ex is ArgumentOutOfRangeException ||
-                                        ex is OverflowException ||
-                                        ex is IndexOutOfRangeException)
-                {
-                    // very long wine log lines get chopped off after a (seemingly) arbitrary limit resulting in strings that are not null terminated
-                    //logWriter.WriteLine("Error writing Wine log line:");
-                    //logWriter.WriteLine(ex.Message);
-                }
-            });
-
-            firstrun.Start();
-        }
-
         Process helperProcess = new();
         helperProcess.StartInfo = psi;
         helperProcess.ErrorDataReceived += new DataReceivedEventHandler((_, errLine) =>
@@ -300,7 +302,6 @@ public class CompatibilityTools
                 //logWriter.WriteLine(ex.Message);
             }
         });
-
         helperProcess.Start();
         if (writeLog)
             helperProcess.BeginErrorReadLine();
@@ -335,19 +336,17 @@ public class CompatibilityTools
 
     public Int32 GetUnixProcessIdByName(string executableName)
     {
-        Console.WriteLine($"Process Name = {executableName}");
         ProcessStartInfo psi = new ProcessStartInfo("pgrep");
         psi.RedirectStandardOutput = true;
         psi.RedirectStandardError = true;
         psi.UseShellExecute = false;
-        psi.ArgumentList.Add("-n");
+        psi.ArgumentList.Add("-fn");
         psi.ArgumentList.Add(executableName);
 
-        Process pidget = new();
-        pidget.StartInfo = psi;
-        pidget.Start();
-
-        var output = pidget.StandardOutput.ReadToEnd();
+        Process pgrep = new();
+        pgrep.StartInfo = psi;
+        pgrep.Start();
+        var output = pgrep.StandardOutput.ReadToEnd();
         if (string.IsNullOrWhiteSpace(output))
             return 0;
         var matchingLines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
@@ -358,7 +357,7 @@ public class CompatibilityTools
     public string UnixToWinePath(string unixPath)
     {
         var launchArguments = new string[] { "winepath", "--windows", unixPath };
-        var winePath = RunInPrefix(launchArguments, redirectOutput: true);
+        var winePath = (UseProton) ? RunInMinProton($"\"{unixPath}\"", verb: "getcompatpath") : RunInPrefix(launchArguments, redirectOutput: true);
         var output = winePath.StandardOutput.ReadToEnd();
         return output.Split('\n', StringSplitOptions.RemoveEmptyEntries).LastOrDefault();
     }
