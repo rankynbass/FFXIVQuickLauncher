@@ -15,20 +15,17 @@ public enum WineStartupType
     [SettingsDescription("Official Wine-XIV 7.10 (Official Launcher Default)", "A custom version of Wine-TKG 7.10 with XIV patches.")]
     Official7_10,
 
-    [SettingsDescription("Official Wine-XIV 7.15 (Untested)", "A custom version of Wine-TKG 7.15 with XIV patches.")]
-    Official7_15,
-
-    [SettingsDescription("RB's Wine-XIV 8.3.0 (XIVLauncher-RB Default)", "A custom version of Wine-TKG 8.3 with XIV patches.")]
-    TKG_Patched8_3_0,
-
-    [SettingsDescription("RB's Wine Proton7-35", "Based on Wine-GE, but with XIV patches applied.")]
-    Unoffical7_35,
+    [SettingsDescription("Official Wine-XIV 8.5 (New Default)", "A custom version of Wine-TKG 8.5 with XIV patches. Includes stutter fix.")]
+    Official8_5,
 
     [SettingsDescription("RB's Wine Proton7-36", "Based on Wine-GE, but with XIV and Haptic Feedback patches applied.")]
-    Unoffical7_36,
+    Proton7_36,
 
-    [SettingsDescription("RB's Wine Proton7-38", "Based on Wine-GE, but with XIV and Haptic Feedback patches applied.")]
-    Unoffical7_38,
+    [SettingsDescription("RB's Wine Proton7-42", "Based on Wine-GE, but with XIV and Haptic Feedback patches applied.")]
+    Proton7_42,
+
+    [SettingsDescription("RB's Wine Proton7-43", "Based on Wine-GE, but with XIV and Haptic Feedback patches applied. Includes stutter fix.")]
+    Proton7_43,
 
     [SettingsDescription("Custom", "Point XIVLauncher to a custom location containing wine binaries to run the game with.")]
     Custom,
@@ -76,30 +73,25 @@ public class WineSettings
                 WineFolder = "wine-xiv-staging-fsync-git-7.10.r3.g560db77d";
                 break;
             
-            case WineStartupType.Official7_15:
-                WineURL = $"https://github.com/goatcorp/wine-xiv-git/releases/download/7.15.r4.gfa8d0abc/wine-xiv-staging-fsync-git-{DISTRO}-7.15.r4.gfa8d0abc.tar.xz";
-                WineFolder = "wine-xiv-staging-fsync-git-7.15.r4.gfa8d0abc";
+            case WineStartupType.Managed:
+            case WineStartupType.Official8_5:
+                WineURL = $"https://github.com/goatcorp/wine-xiv-git/releases/download/8.5.r4.g4211bac7/wine-xiv-staging-fsync-git-{DISTRO}-8.5.r4.g4211bac7.tar.xz";
+                WineFolder = "wine-xiv-staging-fsync-git-8.5.r4.g4211bac7";
                 break;
 
-            case WineStartupType.Managed:
-            case WineStartupType.TKG_Patched8_3_0:
-                WineURL = "https://github.com/rankynbass/unofficial-wine-xiv-git/releases/download/v8.3.0/unofficial-wine-xiv-git-v8.3.0.tar.xz";
-                WineFolder = "unofficial-wine-xiv-git-v8.3.0";
-                break;                
-            
-            case WineStartupType.Unoffical7_35:
-                WineURL = "https://github.com/rankynbass/wine-ge-xiv/releases/download/xiv-Proton7-35/unofficial-wine-xiv-Proton7-35-x86_64.tar.xz";
-                WineFolder = "unofficial-wine-xiv-Proton7-35-x86_64";
-                break;
-            
-            case WineStartupType.Unoffical7_36:
+            case WineStartupType.Proton7_36:
                 WineURL = "https://github.com/rankynbass/wine-ge-xiv/releases/download/xiv-Proton7-36/unofficial-wine-xiv-Proton7-36-x86_64.tar.xz";
                 WineFolder = "unofficial-wine-xiv-Proton7-36-x86_64";
                 break;
+            
+            case WineStartupType.Proton7_42:
+                WineURL = "https://github.com/rankynbass/wine-ge-xiv/releases/download/xiv-Proton7-42/unofficial-wine-xiv-Proton7-42-x86_64.tar.xz";
+                WineFolder = "unofficial-wine-xiv-Proton7-42-x86_64";
+                break;
 
-            case WineStartupType.Unoffical7_38:
-                WineURL = "https://github.com/rankynbass/wine-ge-xiv/releases/download/xiv-Proton7-38/unofficial-wine-xiv-Proton7-38-x86_64.tar.xz";
-                WineFolder = "unofficial-wine-xiv-Proton7-38-x86_64";
+            case WineStartupType.Proton7_43:
+                WineURL = "https://github.com/rankynbass/wine-ge-xiv/releases/download/xiv-Proton7-43/unofficial-wine-xiv-Proton7-43-x86_64.tar.xz";
+                WineFolder = "unofficial-wine-xiv-Proton7-43-x86_64";
                 break;
 
             case WineStartupType.Proton:
