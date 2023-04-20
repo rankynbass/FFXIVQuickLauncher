@@ -14,17 +14,15 @@ public class ProtonSettings
 
     public string SteamLibrary => Path.Combine(SteamRoot, "steamapps", "common");
 
-    public string SoldierRun => Path.Combine(SteamLibrary, "SteamLinuxRuntime_soldier", "run");
+    public string RuntimeRun => Path.Combine(SteamRuntime, "run");
 
-    public string SoldierInject => Path.Combine(SteamLibrary, "SteamLinuxRuntime_soldier","_v2-entry-point");
+    public string RuntimeInject => Path.Combine(SteamRuntime,"_v2-entry-point");
 
     public string GamePath { get; }
 
     public string ConfigPath { get; }
 
-    public bool UseReaper { get; }
-
-    public bool UseSoldier { get; }
+    public string SteamRuntime { get; }
 
     public string ReaperPath => Path.Combine(SteamRoot,"ubuntu12_32","reaper");
 
@@ -32,7 +30,9 @@ public class ProtonSettings
 
     public string SteamAppId { get; }
 
-    public ProtonSettings(DirectoryInfo protonPrefix, string steamRoot, string protonPath, string gamePath = "", string configPath = "", string appId = "39210", bool useSoldier = true, bool useReaper = false)
+    public bool UseRuntime { get; }
+
+    public ProtonSettings(DirectoryInfo protonPrefix, string steamRoot, string protonPath, string gamePath = "", string configPath = "", string appId = "39210", string steamRuntime = "")
     {
         Prefix = protonPrefix;
         string xlcore = Path.Combine(Environment.GetEnvironmentVariable("HOME"), ".xlcore");
@@ -41,11 +41,11 @@ public class ProtonSettings
         GamePath = string.IsNullOrEmpty(gamePath) ? Path.Combine(xlcore, "ffxiv") : gamePath;
         ConfigPath = string.IsNullOrEmpty(configPath) ? Path.Combine(xlcore, "ffxivConfig") : configPath;
 #if FLATPAK
-        UseSoldier = false; // Already in a flatpak container, so this is ignored. Pressure-vessel and flatpak don't like to share.
+        SteamRuntime = ""; // Already in a flatpak container, so this is ignored. Pressure-vessel and flatpak don't like to share.
 #else
-        UseSoldier = useSoldier;
+        SteamRuntime = steamRuntime;
 #endif
-        UseReaper = useReaper;
+        UseRuntime = !string.IsNullOrEmpty(SteamRuntime);
         SteamAppId = appId;
     }
 
@@ -54,25 +54,18 @@ public class ProtonSettings
 #if FLATPAK
         inject = true;
 #endif
-        if (UseReaper) return ReaperPath;
-        if (UseSoldier) return inject ? SoldierInject : SoldierRun;
+        if (UseRuntime) return inject ? RuntimeInject : RuntimeRun;
         return ProtonPath;   
     }
 
     public string GetArguments(bool inject = true, string verb = "runinprefix")
     {
         List<string> commands = new List<string>();
-        if (UseReaper)
+        if (UseRuntime)
         {
-            commands.Add("SteamLaunch --");
-        }
-        if (UseSoldier)
-        {
-            if (UseReaper) commands.Add(inject ? SoldierInject : SoldierRun);
             commands.Add(inject ? "--verb=waitforexitandrun --" : "--");
-        }
-        if (UseSoldier || UseReaper)
             commands.Add("\"" + ProtonPath + "\"");
+        }
         commands.Add(verb);
 
         return string.Join(' ', commands);        
@@ -81,20 +74,12 @@ public class ProtonSettings
     public string[] GetArgumentsAsArray(bool inject = true, string verb = "runinprefix")
     {
         List<string> commands = new List<string>();
-        if (UseReaper)
+        if (UseRuntime)
         {
-            commands.Add("SteamLaunch");
-            commands.Add("--");
-        }
-        if (UseSoldier)
-        {
-            if (UseReaper) commands.Add(inject ? SoldierInject : SoldierRun);
             if (inject) commands.Add("--verb=waitforexitandrun");
             commands.Add("--");
-
-        }
-        if (UseSoldier || UseReaper)
             commands.Add(ProtonPath);
+        }
         commands.Add(verb);
 
         return commands.ToArray();
