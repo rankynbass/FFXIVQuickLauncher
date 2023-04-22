@@ -326,6 +326,7 @@ public class CompatibilityTools
     {
         var wineDbg = RunInPrefix("winedbg --command \"info procmap\"", redirectOutput: true);
         var output = wineDbg.StandardOutput.ReadToEnd();
+        Log.Verbose("winedbg --command \"info procmap\"\n" + output);
         if (output.Contains("syntax error\n"))
             return 0;
         var matchingLines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries).Skip(1).Where(
@@ -336,22 +337,15 @@ public class CompatibilityTools
 
     public Int32 GetUnixProcessIdByName(string executableName)
     {
-        ProcessStartInfo psi = new ProcessStartInfo("pgrep");
-        psi.RedirectStandardOutput = true;
-        psi.RedirectStandardError = true;
-        psi.UseShellExecute = false;
-        psi.ArgumentList.Add("-fn");
-        psi.ArgumentList.Add(executableName);
-
-        Process pgrep = new();
-        pgrep.StartInfo = psi;
-        pgrep.Start();
-        var output = pgrep.StandardOutput.ReadToEnd();
-        if (string.IsNullOrWhiteSpace(output))
-            return 0;
-        var matchingLines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-        var unixPids = matchingLines.Select(l => int.Parse(l, System.Globalization.NumberStyles.Integer)).ToArray();
-        return unixPids.FirstOrDefault();
+        var procList = new List<int>();
+        foreach (var process in Process.GetProcessesByName(executableName))
+        {
+            procList.Add(process.Id);
+            Log.Verbose($"Process Id for {executableName} found: {process.Id}");
+        }
+        // There should only be one, but if we can't find it, return 0, and if there's more, just return the first one.
+        if (procList.Count == 0) return 0;
+        return procList[0];
     }
 
     public string UnixToWinePath(string unixPath)

@@ -75,10 +75,19 @@ public class UnixDalamudRunner : IDalamudRunner
        
         var dalamudProcess = compatibility.RunInPrefix(string.Join(" ", launchArguments), environment: environment, redirectOutput: true, writeLog: true);
         var output = dalamudProcess.StandardOutput.ReadLine();
+        Console.WriteLine("DALAMUD " + output);
         if (output == null && !compatibility.UseProton)
             throw new DalamudRunnerException("An internal Dalamud error has occured");
+        // Get around "ERROR: Could Not Get Primary Adapter Handle"
+        // if (output.Contains("ERROR"))
+        // {
+        //     Console.WriteLine("DALAMUD - Wine is unpatched or improperly patched. Skipping to next line");
+        //     output = dalamudProcess.StandardOutput.ReadLine();
+        //     if (output == null && !compatibility.UseProton)
+        //         throw new DalamudRunnerException("An internal Dalamud error has occurred");
+        //     Console.WriteLine("DALAMUD - " + output);
+        // }
 
-        Console.WriteLine("DALAMUD " + output);
         new Thread(() =>
         {
             while (!dalamudProcess.StandardOutput.EndOfStream)
@@ -92,40 +101,60 @@ public class UnixDalamudRunner : IDalamudRunner
 
         // If using proton, the dalamudProcess will output gibberish or nothing, so we'll get unix pid by name.
         // Dalamud won't launch the DalamudCrashHandler, but XIVLauncher will close when ffxiv exits.
-        if (compatibility.UseProton)
+        // if (compatibility.UseProton)
+        // {
+        //     Log.Information($"Trying to get Unix Process Id of {gameExe.Name}");
+        //     var unixPid = compatibility.GetUnixProcessIdByName(gameExe.Name);
+        //     if (unixPid == 0)
+        //     {
+        //         Log.Error("Could not retrieve Unix process ID by name. Proton did not run correctly.");
+        //         return null;
+        //     }
+        //     var gameProcess = Process.GetProcessById(unixPid);
+        //     Log.Information($"Got game process handle {gameProcess.Handle} with Unix pid {gameProcess.Id}");
+        //     return gameProcess;
+        // }
+
+        // try
+        // {
+        //     var dalamudConsoleOutput = JsonConvert.DeserializeObject<DalamudConsoleOutput>(output);
+        //     var unixPid = compatibility.GetUnixProcessId(dalamudConsoleOutput.Pid);
+        //     // If using unpatched wine, DalamudCrashHandler won't run, but XIVLauncher will close properly:
+        //     if (unixPid == 0)
+        //     {
+        //         Log.Error("Using unpatched wine... trying backup method to get pid.");
+        //         unixPid = compatibility.GetUnixProcessIdByName(gameExe.Name);
+        //     }
+
+        //     if (unixPid == 0)
+        //     {
+        //         Log.Error("Could not retrive Unix process ID, You should never see this error message. Please file a ticket at http://github.com/rankynbass/XIVLauncher.Core.");
+        //         return null;
+        //     }
+
+        //     var gameProcess = Process.GetProcessById(unixPid);
+        //     Log.Information($"Got game process handle {gameProcess.Handle} with Unix pid {gameProcess.Id} and Wine pid {dalamudConsoleOutput.Pid}");
+        //     return gameProcess;
+        // }
+        // catch (JsonReaderException ex)
+        // {
+        //     Log.Error(ex, $"Couldn't parse Dalamud output: {output}");
+        // }
+        try
         {
-            Log.Information($"Trying to get Unix Process Id of {gameExe.Name}");
             var unixPid = compatibility.GetUnixProcessIdByName(gameExe.Name);
             if (unixPid == 0)
             {
-                Log.Error("Could not retrieve Unix process ID by name. Proton did not run correctly.");
-                return null;
+                Log.Error("Could not retrive Unix process ID. You should never see this error message. Please file a ticket at http://github.com/rankynbass/XIVLauncher.Core.");
+                return null;            
             }
             var gameProcess = Process.GetProcessById(unixPid);
-            Log.Information($"Got game process handle {gameProcess.Handle} with Unix pid {gameProcess.Id}");
+            Log.Information($"Got game process handle {gameProcess.Handle} with Unix pid {gameProcess.Id}.");
             return gameProcess;
         }
-
-        try
+        catch (Exception ex)
         {
-            var dalamudConsoleOutput = JsonConvert.DeserializeObject<DalamudConsoleOutput>(output);
-            var unixPid = compatibility.GetUnixProcessId(dalamudConsoleOutput.Pid);
-            // If using unpatched wine, DalamudCrashHandler won't run, but XIVLauncher will close properly:
-            if (unixPid == 0) unixPid = compatibility.GetUnixProcessIdByName(gameExe.Name);
-
-            if (unixPid == 0)
-            {
-                Log.Error("Could not retrive Unix process ID, this feature currently requires a patched wine version");
-                return null;
-            }
-
-            var gameProcess = Process.GetProcessById(unixPid);
-            Log.Information($"Got game process handle {gameProcess.Handle} with Unix pid {gameProcess.Id} and Wine pid {dalamudConsoleOutput.Pid}");
-            return gameProcess;
-        }
-        catch (JsonReaderException ex)
-        {
-            Log.Error(ex, $"Couldn't parse Dalamud output: {output}");
+            Log.Error(ex, "Something went wrong with Dalamud injection");
             return null;
         }
     }
