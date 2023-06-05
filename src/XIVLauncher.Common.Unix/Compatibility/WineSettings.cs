@@ -83,8 +83,8 @@ public class WineSettings
                 break;
 
             case WineStartupType.Proton7_35:
-                WineURL = "https://github.com/rankynbass/wine-ge-xiv/releases/download/xiv-Proton7-36/unofficial-wine-xiv-Proton7-36-x86_64.tar.xz";
-                WineFolder = "unofficial-wine-xiv-Proton7-36-x86_64";
+                WineURL = "https://github.com/rankynbass/wine-ge-xiv/releases/download/xiv-Proton7-35/unofficial-wine-xiv-Proton7-35-x86_64.tar.xz";
+                WineFolder = "unofficial-wine-xiv-Proton7-35-x86_64";
                 break;
 
             case WineStartupType.Proton7_43:
