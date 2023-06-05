@@ -337,15 +337,23 @@ public class CompatibilityTools
 
     public Int32 GetUnixProcessIdByName(string executableName)
     {
-        var procList = new List<int>();
+        int closest = 0;
+        var currentProcess = Process.GetCurrentProcess(); // Gets XIVLauncher.Core's process
+        bool nonunique = false;
         foreach (var process in Process.GetProcessesByName(executableName))
         {
-            procList.Add(process.Id);
-            Log.Verbose($"Process Id for {executableName} found: {process.Id}");
+            if (process.Id < currentProcess.Id) continue;  // Process was launched before XIVLauncher.Core
+            if (process.SessionId != currentProcess.SessionId) continue; // Process was launched from a different session than XIVLauncher.Core
+            // Assume that the closest PID to XIVLauncher.Core's is the correct one. But log an error if more than one is found.
+            if ((closest - currentProcess.Id) > (process.Id - currentProcess.Id) || closest == 0)
+            {
+                if (closest != 0) nonunique = true;
+                closest = process.Id;
+            }
+            if (nonunique) Log.Error($"More than one {executableName} found! Selecting the most likely match with process id {closest}.");
+            return closest;
         }
-        // There should only be one, but if we can't find it, return 0, and if there's more, just return the first one.
-        if (procList.Count == 0) return 0;
-        return procList[0];
+        return closest;
     }
 
     public string UnixToWinePath(string unixPath)
