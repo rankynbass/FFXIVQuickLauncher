@@ -21,15 +21,74 @@ public class DxvkSettings
 
     public Dxvk.DxvkVersion DxvkVersion { get; }
 
+    public string WineD3DBackend {get; }
+
+    public const string WINED3D_REGKEY = "HKEY_CURRENT_USER\\Software\\Wine\\Direct3D";
+
     private const string ALLOWED_CHARS = "^[0-9a-zA-Z,=.]+$";
 
     private const string ALLOWED_WORDS = "^(?:devinfo|fps|frametimes|submissions|drawcalls|pipelines|descriptors|memory|gpuload|version|api|cs|compiler|samplers|scale=(?:[0-9])*(?:.(?:[0-9])+)?)$";
 
-    public DxvkSettings(Dxvk.DxvkHudType hud, DirectoryInfo corePath, Dxvk.DxvkVersion version, bool enabled = true, string? dxvkHudCustom = null, FileInfo? mangoHudConfig = null, bool async = true,
+    public DxvkSettings(Dxvk.DxvkHudType hud, DirectoryInfo corePath, Dxvk.DxvkVersion version, string? dxvkHudCustom = null, FileInfo? mangoHudConfig = null, bool async = true,
                         int maxFrameRate = 0)
     {
-        Enabled = enabled;
         DxvkHud = hud;
+        DxvkVersion = version;
+        WineD3DBackend = "gl";
+        Enabled = (DxvkVersion == Dxvk.DxvkVersion.Disabled || DxvkVersion == Dxvk.DxvkVersion.DisabledVK) ? false : true;
+        if (!Enabled)
+        {
+            DxvkVars = new Dictionary<string, string>
+            {
+                { "PROTON_USE_WINED3D", "1"},
+            };
+            
+            if (DxvkVersion == Dxvk.DxvkVersion.DisabledVK)
+            {
+                WineD3DBackend = "vulkan";
+                switch (this.DxvkHud)
+                {
+                    case Dxvk.DxvkHudType.MangoHud:
+                        DxvkVars.Add("MANGOHUD","1");
+                        DxvkVars.Add("MANGOHUD_CONFIG", "");
+                        break;
+
+                    case Dxvk.DxvkHudType.MangoHudCustom:
+                        DxvkVars.Add("MANGOHUD","1");
+
+                        if (mangoHudConfig is null)
+                        {
+                            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                            var conf1 = Path.Combine(corePath.FullName, "MangoHud.conf");
+                            var conf2 = Path.Combine(home, ".config", "MangoHud", "wine-ffxiv_dx11.conf");
+                            var conf3 = Path.Combine(home, ".config", "MangoHud", "MangoHud.conf");
+                            if (File.Exists(conf1))
+                                mangoHudConfig = new FileInfo(conf1);
+                            else if (File.Exists(conf2))
+                                mangoHudConfig = new FileInfo(conf2);
+                            else if (File.Exists(conf3))
+                                mangoHudConfig = new FileInfo(conf3);
+                        }
+
+                        if (mangoHudConfig != null && mangoHudConfig.Exists)
+                            DxvkVars.Add("MANGOHUD_CONFIGFILE", mangoHudConfig.FullName);
+                        else
+                            DxvkVars.Add("MANGOHUD_CONFIG", "");
+                        break;
+
+                    case Dxvk.DxvkHudType.MangoHudFull:
+                        DxvkVars.Add("MANGOHUD","1");
+                        DxvkVars.Add("MANGOHUD_CONFIG","full");
+                        break;
+                    
+                    default:
+                        break;
+                }
+            }
+            DownloadURL = "";
+            FolderName = "";
+            return;
+        }
         var dxvkConfigPath = new DirectoryInfo(Path.Combine(corePath.FullName, "compatibilitytool", "dxvk"));
         if (!dxvkConfigPath.Exists)
             dxvkConfigPath.Create();
@@ -39,7 +98,6 @@ public class DxvkSettings
             { "DXVK_CONFIG_FILE", Path.Combine(dxvkConfigPath.FullName, "dxvk.conf") },
             { "DXVK_FRAME_RATE", (maxFrameRate).ToString() }
         };
-        DxvkVersion = version;
         var release = DxvkVersion switch
         {
             Dxvk.DxvkVersion.v1_10_1 => "1.10.1",
@@ -47,9 +105,10 @@ public class DxvkSettings
             Dxvk.DxvkVersion.v1_10_3 => "1.10.3",
             Dxvk.DxvkVersion.v2_0 => "2.0",
             Dxvk.DxvkVersion.v2_1 => "2.1",
+            Dxvk.DxvkVersion.v2_2 => "2.2",
             _ => throw new ArgumentOutOfRangeException(),
         };
-        if (release != "2.1")
+        if (new[] {"1.10.1", "1.10.2", "1.10.3", "2.0"}.Contains(release))
         {
             DownloadURL = $"https://github.com/Sporif/dxvk-async/releases/download/{release}/dxvk-async-{release}.tar.gz";
             FolderName = $"dxvk-async-{release}";
@@ -60,6 +119,7 @@ public class DxvkSettings
             DownloadURL = $"https://github.com/doitsujin/dxvk/releases/download/v{release}/dxvk-{release}.tar.gz";
             FolderName = $"dxvk-{release}";
         }
+
         DirectoryInfo dxvkCachePath = new DirectoryInfo(Path.Combine(dxvkConfigPath.FullName, "cache"));
         if (!dxvkCachePath.Exists) dxvkCachePath.Create();
         this.DxvkVars.Add("DXVK_STATE_CACHE_PATH", Path.Combine(dxvkCachePath.FullName, release + (async ? "-async" : "")));
@@ -124,14 +184,6 @@ public class DxvkSettings
 
             default:
                 throw new ArgumentOutOfRangeException();
-        }
-
-        if (!this.Enabled)
-        {
-            DxvkVars = new Dictionary<string, string>
-            {
-                { "PROTON_USE_WINED3D", "1" },
-            };
         }
     }
 

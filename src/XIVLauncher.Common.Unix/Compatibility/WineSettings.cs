@@ -18,6 +18,9 @@ public enum WineStartupType
     [SettingsDescription("Official Wine-XIV 8.5 (New Default)", "A custom version of Wine-TKG 8.5 with XIV patches. Includes stutter fix.")]
     Official8_5,
 
+    [SettingsDescription("Unofficial Wine-XIV 8.8", "A custom version of Wine-TKG 8.8.r7 with XIV patches. Includes stutter fix.")]
+    Unofficial8_8,    
+
     [SettingsDescription("RB's Wine Proton7-35", "Based on Wine-GE, but with XIV and Haptic Feedback patches applied.")]
     Proton7_35,
 
@@ -82,6 +85,11 @@ public class WineSettings
                 WineFolder = "wine-xiv-staging-fsync-git-8.5.r4.g4211bac7";
                 break;
 
+            case WineStartupType.Unofficial8_8:
+                WineURL = "https://github.com/rankynbass/unofficial-wine-xiv-git/releases/download/v8.8.0/unofficial-wine-xiv-git-8.8.0.tar.xz";
+                WineFolder = "unofficial-wine-xiv-git-8.8.0";
+                break;
+
             case WineStartupType.Proton7_35:
                 WineURL = "https://github.com/rankynbass/wine-ge-xiv/releases/download/xiv-Proton7-35/unofficial-wine-xiv-Proton7-35-x86_64.tar.xz";
                 WineFolder = "unofficial-wine-xiv-Proton7-35-x86_64";
@@ -94,12 +102,12 @@ public class WineSettings
 
             case WineStartupType.Proton8_4:
                 WineURL = "https://github.com/rankynbass/wine-ge-xiv/releases/download/xiv-Proton8-4/unofficial-wine-xiv-Proton8-4-x86_64.tar.xz";
-                WineFolder = "unofficial-wine-xiv-Proton8_4-x86_64";
+                WineFolder = "unofficial-wine-xiv-Proton8-4-x86_64";
                 break;
 
             case WineStartupType.Proton8_7:
                 WineURL = "https://github.com/rankynbass/wine-ge-xiv/releases/download/xiv-Proton8-7/unofficial-wine-xiv-Proton8-7-x86_64.tar.xz";
-                WineFolder = "unofficial-wine-xiv-Proton8_7-x86_64";
+                WineFolder = "unofficial-wine-xiv-Proton8-7-x86_64";
                 break;
 
             case WineStartupType.Proton:
