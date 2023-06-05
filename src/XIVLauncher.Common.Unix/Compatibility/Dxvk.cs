@@ -65,12 +65,6 @@ public static class Dxvk
 
     public enum DxvkVersion
     {
-        [SettingsDescription("1.10.1", "The version of DXVK originally used with XIVLauncher.Core 1.0.3. Safe to use.")]
-        v1_10_1,
-
-        [SettingsDescription("1.10.2", "Older version of 1.10 branch of DXVK. Safe to use.")]
-        v1_10_2,
-
         [SettingsDescription("1.10.3 (default)", "Current version of 1.10 branch of DXVK.")]
         v1_10_3,
 

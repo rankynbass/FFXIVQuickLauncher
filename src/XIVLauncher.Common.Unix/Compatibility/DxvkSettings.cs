@@ -100,15 +100,13 @@ public class DxvkSettings
         };
         var release = DxvkVersion switch
         {
-            Dxvk.DxvkVersion.v1_10_1 => "1.10.1",
-            Dxvk.DxvkVersion.v1_10_2 => "1.10.2",
             Dxvk.DxvkVersion.v1_10_3 => "1.10.3",
             Dxvk.DxvkVersion.v2_0 => "2.0",
             Dxvk.DxvkVersion.v2_1 => "2.1",
             Dxvk.DxvkVersion.v2_2 => "2.2",
             _ => throw new ArgumentOutOfRangeException(),
         };
-        if (new[] {"1.10.1", "1.10.2", "1.10.3", "2.0"}.Contains(release))
+        if (new[] {"1.10.3", "2.0"}.Contains(release))
         {
             DownloadURL = $"https://github.com/Sporif/dxvk-async/releases/download/{release}/dxvk-async-{release}.tar.gz";
             FolderName = $"dxvk-async-{release}";
