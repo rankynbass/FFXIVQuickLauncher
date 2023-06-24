@@ -99,31 +99,34 @@ public class UnixDalamudRunner : IDalamudRunner
 
         }).Start();
 
+        int unixPid = 0;
+        int winePid = 0;
         try
         {
             var dalamudConsoleOutput = JsonConvert.DeserializeObject<DalamudConsoleOutput>(output);
-            var unixPid = compatibility.GetUnixProcessId(dalamudConsoleOutput.Pid);
-
-            if (unixPid == 0)
-            {
-                Log.Warning("Using unpatched wine. This may cause issues with Dalamud. Trying backup method to get Unix process ID.");
-                // Use backup method to find pid of ffxiv process. This should always work provided the user doesn't try to run two instances of FFXIV at once.
-                unixPid = compatibility.GetUnixProcessIdByName(gameExe.Name);
-            }
-            if (unixPid == 0)
-            {
-                Log.Error($"Could not find Unix process ID of {gameExe.Name}.");
-                return null;
-            }
-
-            var gameProcess = Process.GetProcessById(unixPid);
-            Log.Verbose($"Got game process handle {gameProcess.Handle} with Unix pid {gameProcess.Id} and Wine pid {dalamudConsoleOutput.Pid}");
-            return gameProcess;
+            unixPid = compatibility.GetUnixProcessId(dalamudConsoleOutput.Pid);
+            winePid = dalamudConsoleOutput.Pid;
         }
         catch (JsonReaderException ex)
         {
             Log.Error(ex, $"Couldn't parse Dalamud output: {output}");
+        }
+
+        if (unixPid == 0)
+        {
+            Log.Warning("Using unpatched wine, or had a Dalamud error. Dalamud may not function properly. Trying backup method to get Unix process ID.");
+            // Use backup method to find pid of ffxiv process. This should always work provided the user doesn't try to run two instances of FFXIV at once.
+            unixPid = compatibility.GetUnixProcessIdByName(gameExe.Name);
+        }
+        if (unixPid == 0)
+        {
+            Log.Error($"Could not find Unix process ID of {gameExe.Name}.");
             return null;
         }
+
+        var gameProcess = Process.GetProcessById(unixPid);
+        Log.Verbose($"Got game process handle {gameProcess.Handle} with Unix pid {gameProcess.Id} and Wine pid {(winePid == 0 ? "unknown" : winePid)}");
+        return gameProcess;
+
     }
 }

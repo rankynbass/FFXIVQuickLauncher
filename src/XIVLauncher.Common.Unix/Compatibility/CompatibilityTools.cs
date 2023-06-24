@@ -112,7 +112,7 @@ public class CompatibilityTools
         foreach (var arg in args)
             psi.ArgumentList.Add(arg);
         
-        Log.Information("Running in prefix (array): {FileName} {Arguments}", psi.FileName, psi.ArgumentList.Aggregate(string.Empty, (a, b) => a + " " + b));
+        Log.Verbose("Running in prefix (array): {FileName} {Arguments}", psi.FileName, psi.ArgumentList.Aggregate(string.Empty, (a, b) => a + " " + b));
         return RunInPrefix(psi, workingDirectory, environment, redirectOutput, writeLog, wineD3D);
     }
 
