@@ -82,12 +82,11 @@ public class UnixDalamudRunner : IDalamudRunner
         if (output.Equals("ERROR: Could Not Get Primary Adapter Handle"))
         {
             output = dalamudProcess.StandardOutput.ReadLine() ?? "";
-            Console.WriteLine(output);
         }
 
         if (string.IsNullOrEmpty(output) || output.Contains("ERROR"))
             throw new DalamudRunnerException("An internal Dalamud error has occured");
-        
+
         new Thread(() =>
         {
             while (!dalamudProcess.StandardOutput.EndOfStream)

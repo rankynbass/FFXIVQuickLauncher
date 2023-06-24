@@ -17,6 +17,10 @@ public class WineRunner
 
     public string RunArguments { get; }
 
+    public string MinimalRunCommand { get; }
+
+    public string ProtonVerb => "runinprefix";
+
     public string WineServer { get; }
 
     public string PathArguments { get; }
@@ -33,9 +37,9 @@ public class WineRunner
 
     public Dictionary<string, string> Environment { get; }
 
-    public WineRunner(string runCmd, string runArgs, string folder, string url, string rootFolder, Dictionary<string, string> env = null, bool is64only = false, bool isProton = false)
+    public WineRunner(string runCmd, string runArgs, string folder, string url, string rootFolder, Dictionary<string, string> env = null, bool is64only = false, bool isProton = false, string minRunCmd = "")
     {
-        RunArguments = (isProton) ? "runinprefix" : "";
+        RunArguments = runArgs;
         wineFolder = folder;
         downloadUrl = url;
         toolFolder = Path.Combine(rootFolder, "compatibilitytool", "beta");
@@ -51,8 +55,9 @@ public class WineRunner
         {
             if (isProton)
             {
-                RunCommand = Path.Combine(runCmd, "proton");
-                WineServer = Path.Combine(runCmd, "files", "bin", "wineserver");
+                var command = new FileInfo(runCmd);
+                RunCommand = command.FullName;
+                WineServer = Path.Combine(command.DirectoryName, "files", "bin", "wineserver");
             }
             else
             {
@@ -65,6 +70,7 @@ public class WineRunner
                 WineServer = Path.Combine(runCmd, "wineserver");
             }
         }
+        MinimalRunCommand = string.IsNullOrEmpty(minRunCmd) ? RunCommand : minRunCmd;
     }
 
     public async Task Install()

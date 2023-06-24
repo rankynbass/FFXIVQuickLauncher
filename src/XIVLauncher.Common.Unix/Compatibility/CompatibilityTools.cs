@@ -65,6 +65,13 @@ public class CompatibilityTools
 
     public async Task EnsureTool(DirectoryInfo tempPath)
     {
+        if (WineSettings.IsProton)
+        {
+            IsToolReady = true;
+            EnsurePrefix();
+            return;
+        }
+
         // Check to make sure wine is valid
         await WineSettings.Install();
         if (!File.Exists(WineSettings.RunCommand))
@@ -91,15 +98,39 @@ public class CompatibilityTools
 
     public void EnsurePrefix()
     {
-        RunInPrefix("cmd /c dir %userprofile%/Documents > nul").WaitForExit();
+        if (WineSettings.IsProton)
+            RunInMinProton("run", "cmd /c dir %userprofile%/Documents > nul").WaitForExit();
+        else
+            RunInPrefix("cmd /c dir %userprofile%/Documents > nul").WaitForExit();
+    }
+
+    public Process RunInMinProton(string verb, string command, bool wineD3D = false)
+    {
+        var psi = new ProcessStartInfo(WineSettings.MinimalRunCommand);
+        psi.RedirectStandardOutput = true;
+        psi.RedirectStandardError = true;
+        psi.UseShellExecute = false;
+        psi.Environment.Add("STEAM_COMPAT_DATA_PATH", WineSettings.Environment["STEAM_COMPAT_DATA_PATH"]);
+        psi.Environment.Add("STEAM_COMPAT_CLIENT_INSTALL_PATH", WineSettings.Environment["STEAM_COMPAT_CLIENT_INSTALL_PATH"]);
+        if (wineD3D)
+            psi.Environment.Add("WINEDLLOVERRIDES", "msquic=,mscoree=n,b;d3d9,d3d11,d3d10core,dxgi=b");
+        else
+            psi.Environment.Add("WINEDLLOVERRIDES", WineDLLOverrides);
+        psi.Arguments = CompactString(verb + " " + command);
+       
+        var minProton = new Process();
+        minProton.StartInfo = psi;
+        minProton.Start();
+        Log.Information($"Running minimal proton in prefix: {psi.FileName} {psi.Arguments}");
+        return minProton;
     }
 
     public Process RunInPrefix(string command, string workingDirectory = "", IDictionary<string, string> environment = null, bool redirectOutput = false, bool writeLog = false, bool wineD3D = false)
     {
         var psi = new ProcessStartInfo(WineSettings.RunCommand);
-        psi.Arguments = (WineSettings.RunArguments + " " + command).Trim();
+        psi.Arguments = CompactString(WineSettings.RunArguments + (WineSettings.IsProton ? " runinprefix " : " ") + command);
 
-        Log.Verbose("Running in prefix (string): {FileName} {Arguments}", psi.FileName, psi.Arguments);
+        Log.Information("Running in prefix (string): {FileName} {Arguments}", psi.FileName, psi.Arguments);
         return RunInPrefix(psi, workingDirectory, environment, redirectOutput, writeLog, wineD3D);
     }
 
@@ -108,11 +139,12 @@ public class CompatibilityTools
         var psi = new ProcessStartInfo(WineSettings.RunCommand);
         if (!string.IsNullOrEmpty(WineSettings.RunArguments))
             foreach (var param in WineSettings.RunArguments.Split(null))
-                psi.ArgumentList.Add(param);
+                if (!string.IsNullOrEmpty(param)) psi.ArgumentList.Add(param);
+        if (WineSettings.IsProton) psi.ArgumentList.Add("runinprefix");
         foreach (var arg in args)
-            psi.ArgumentList.Add(arg);
-        
-        Log.Verbose("Running in prefix (array): {FileName} {Arguments}", psi.FileName, psi.ArgumentList.Aggregate(string.Empty, (a, b) => a + " " + b));
+            if (!string.IsNullOrEmpty(arg)) psi.ArgumentList.Add(arg);
+
+        Log.Information("Running in prefix (array): {FileName} {Arguments}", psi.FileName, psi.ArgumentList.Aggregate(string.Empty, (a, b) => a + " " + b));
         return RunInPrefix(psi, workingDirectory, environment, redirectOutput, writeLog, wineD3D);
     }
 
@@ -148,6 +180,27 @@ public class CompatibilityTools
             ldpreload += item + ":";
         
         return ldpreload.TrimEnd(':');
+    }
+
+    private string CompactString(string s)
+    {
+        var dst = new char[s.Length];
+        uint end = 0;
+        char prev = char.MinValue;
+        for (int k = 0; k < s.Length; ++k)
+        {
+            var c = s[k];
+            dst[end] = c;
+
+            // We'll move forward if the current character is not ' ' or if prev char is not ' '
+            // To avoid 'if' let's get diffs for c and prev and then use bitwise operatios to get 
+            // 0 if n is 0 or 1 if n is non-zero
+            uint x = (uint)(' ' - c) + (uint)(' ' - prev); // non zero if any non-zero
+
+            end += ((x | (~x + 1)) >> 31) & 1; // https://stackoverflow.com/questions/3912112/check-if-a-number-is-non-zero-using-bitwise-operators-in-c by ruslik
+            prev = c;
+        }
+        return new string(dst, 0, (int)end);
     }
 
     private Process RunInPrefix(ProcessStartInfo psi, string workingDirectory, IDictionary<string, string> environment, bool redirectOutput, bool writeLog, bool wineD3D)
@@ -253,8 +306,9 @@ public class CompatibilityTools
         bool nonunique = false;
         foreach (var process in Process.GetProcessesByName(executableName))
         {
-            if (process.Id < currentProcess.Id) continue;  // Process was launched before XIVLauncher.Core
-            if (process.SessionId != currentProcess.SessionId) continue; // Process was launched from a different session than XIVLauncher.Core
+            if (process.Id < currentProcess.Id)
+                continue;  // Process was launched before XIVLauncher.Core
+
             // Assume that the closest PID to XIVLauncher.Core's is the correct one. But log an error if more than one is found.
             if ((closest - currentProcess.Id) > (process.Id - currentProcess.Id) || closest == 0)
             {
@@ -262,15 +316,15 @@ public class CompatibilityTools
                 closest = process.Id;
             }
             if (nonunique) Log.Error($"More than one {executableName} found! Selecting the most likely match with process id {closest}.");
-            return closest;
         }
+        if (closest != 0) Log.Information($"Process for {executableName} found using fallback method.");
         return closest;
     }
 
     public string UnixToWinePath(string unixPath)
     {
-        var launchArguments = new string[] { "winepath", "--windows", unixPath };
-        var winePath = RunInPrefix(launchArguments, redirectOutput: true);
+        //var launchArguments = new string[] { "winepath", "--windows", unixPath };
+        var winePath = (WineSettings.IsProton) ? RunInMinProton("getcompatpath", $"\"{unixPath}\"") : RunInPrefix(new string[] { "winepath", "--windows", unixPath }, redirectOutput: true);
         var output = winePath.StandardOutput.ReadToEnd();
         return output.Split('\n', StringSplitOptions.RemoveEmptyEntries).LastOrDefault();
     }
