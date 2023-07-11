@@ -25,13 +25,11 @@ public class CompatibilityTools
 
     public bool IsToolReady { get; private set; }
 
-    public WineRunner WineSettings { get; private set; }
+    public WineSettings WineSettings { get; private set; }
 
-    public DxvkRunner DxvkSettings { get; private set; }
+    public DxvkSettings DxvkSettings { get; private set; }
 
-    private Dictionary<string, string> EnvVars;
-
-    public string WineDLLOverrides;
+    private string WineDLLOverrides;
 
     private FileInfo LogFile;
 
@@ -39,19 +37,30 @@ public class CompatibilityTools
 
     public bool IsToolDownloaded => File.Exists(WineSettings.RunCommand) && Prefix.Exists;
 
+    public bool IsFlatpak { get; }
 
-    public CompatibilityTools(WineRunner wineSettings, DxvkRunner dxvkSettings, Dictionary<string, string> environment, string wineoverrides, DirectoryInfo prefix, DirectoryInfo toolsFolder, FileInfo logfile)
+
+    public CompatibilityTools(WineSettings wineSettings, DxvkSettings dxvkSettings, DirectoryInfo prefix, DirectoryInfo toolsFolder, FileInfo logfile, bool isFlatpak)
     {
         WineSettings = wineSettings;
         DxvkSettings = dxvkSettings;
-        EnvVars = environment;
         Prefix = prefix;
-        WineDLLOverrides = (string.IsNullOrEmpty(wineoverrides)) ? "msquic=,mscoree=n,b;d3d9,d3d11,d3d10core,dxgi=n,b" : wineoverrides;
-        wineDirectory = new DirectoryInfo(Path.Combine(toolsFolder.FullName, "beta"));
+        var wineoverrides = "msquic=,mscoree=n,b;";
+        if (dxvkSettings.IsDxvk)
+        {
+            wineoverrides += "d3d9,d3d11,d3d10core,dxgi=n,b";
+        }
+        else
+        {
+            wineoverrides += "d3d9,d3d11,d3d10core,dxgi=b";
+        }
+        wineDirectory = new DirectoryInfo(Path.Combine(toolsFolder.FullName, "wine"));
         dxvkDirectory = new DirectoryInfo(Path.Combine(toolsFolder.FullName, "dxvk"));
         LogFile = logfile;
 
         logWriter = new StreamWriter(LogFile.FullName);
+
+        IsFlatpak = isFlatpak;
 
         if (!wineDirectory.Exists)
             wineDirectory.Create();
@@ -73,16 +82,58 @@ public class CompatibilityTools
         }
 
         // Check to make sure wine is valid
-        await WineSettings.Install();
+        await EnsureWine();
         if (!File.Exists(WineSettings.RunCommand))
-            throw new FileNotFoundException("The wine64 binary was not found.");
+            throw new FileNotFoundException("No wine or wine64 binary could be found.");
         EnsurePrefix();
 
         // Check to make sure dxvk is valid
-        if (DxvkSettings.IsDxvk && !WineSettings.IsProton)
-            await DxvkSettings.Install();
+        if (DxvkSettings.IsDxvk)
+            await EnsureDxvk();
 
         IsToolReady = true;
+        Log.Information($"Using wine at path {WineSettings.RunCommand}");
+    }
+
+        private async Task EnsureWine()
+    {
+        if (!WineSettings.IsManaged) return;
+
+        await DownloadTool(wineDirectory.FullName, WineSettings.Folder, WineSettings.DownloadUrl);
+       
+        // Use wine if wine64 isn't found. This is mostly for WoW64 wine builds.
+        WineSettings.RunCommand = WineSettings.SetWineOrWine64(Path.Combine(wineDirectory.FullName, WineSettings.Folder, "bin"));
+    }
+
+    private async Task EnsureDxvk()
+    {
+        await DownloadTool(dxvkDirectory.FullName, DxvkSettings.Folder, DxvkSettings.DownloadUrl);
+
+        var prefixinstall = Path.Combine(Prefix.FullName, "drive_c", "windows", "system32");
+        var files = new DirectoryInfo(Path.Combine(dxvkDirectory.FullName, DxvkSettings.Folder, "x64")).GetFiles();
+
+        foreach (FileInfo fileName in files)
+            fileName.CopyTo(Path.Combine(prefixinstall, fileName.Name), true);
+    }
+
+    private async Task DownloadTool(string toolDirectory, string toolFolder, string downloadUrl)
+    {
+        if (IsDirectoryEmpty(Path.Combine(toolDirectory, toolFolder)))
+        {
+            if (string.IsNullOrEmpty(downloadUrl))
+            {
+                Log.Error($"Attempted to download {toolFolder} without a download URL.");
+                throw new InvalidOperationException($"{toolFolder} does not exist, and no download URL was provided for it.");
+            }
+            Log.Information($"{toolFolder} does not exist. Downloading...");
+            using var client = new HttpClient();
+            var tempPath = Path.GetTempFileName();
+
+            File.WriteAllBytes(tempPath, await client.GetByteArrayAsync(downloadUrl));
+            PlatformHelpers.Untar(tempPath, toolDirectory);
+
+            File.Delete(tempPath);
+        }        
     }
 
     private void ResetPrefix()
@@ -216,6 +267,9 @@ public class CompatibilityTools
         else
             wineEnvironmentVariables.Add("WINEDLLOVERRIDES", WineDLLOverrides);
         wineEnvironmentVariables.Add("XL_WINEONLINUX", "true");
+        var ldPreload = Environment.GetEnvironmentVariable("LD_PRELOAD");
+        if (ldPreload is not null)
+            wineEnvironmentVariables.Add("LD_PRELOAD", ldPreload);
 
         MergeDictionaries(psi.Environment, WineSettings.Environment);
         MergeDictionaries(psi.Environment, DxvkSettings.Environment);
@@ -287,28 +341,34 @@ public class CompatibilityTools
         return GetProcessIds(executableName).FirstOrDefault();
     }
 
-    public Int32 GetUnixProcessId(Int32 winePid)
+    public Int32 GetUnixProcessId(Int32 winePid, string executableName)
     {
+        if (winePid == 0)
+            return GetUnixProcessIdByName(executableName);
         var wineDbg = RunInPrefix("winedbg --command \"info procmap\"", redirectOutput: true);
         var output = wineDbg.StandardOutput.ReadToEnd();
         if (output.Contains("syntax error\n"))
-            return 0;
+            return GetUnixProcessIdByName(executableName);
         var matchingLines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries).Skip(1).Where(
             l => int.Parse(l.Substring(1, 8), System.Globalization.NumberStyles.HexNumber) == winePid);
         var unixPids = matchingLines.Select(l => int.Parse(l.Substring(10, 8), System.Globalization.NumberStyles.HexNumber)).ToArray();
-        return unixPids.FirstOrDefault();
+        var unixPid = unixPids.FirstOrDefault();
+        return (unixPid == 0) ? GetUnixProcessIdByName(executableName) : unixPid;
     }
 
-    public Int32 GetUnixProcessIdByName(string executableName)
+    private Int32 GetUnixProcessIdByName(string executableName)
     {
         int closest = 0;
+        int early = 0;
         var currentProcess = Process.GetCurrentProcess(); // Gets XIVLauncher.Core's process
         bool nonunique = false;
         foreach (var process in Process.GetProcessesByName(executableName))
         {
             if (process.Id < currentProcess.Id)
+            {
+                early = process.Id;
                 continue;  // Process was launched before XIVLauncher.Core
-
+            }
             // Assume that the closest PID to XIVLauncher.Core's is the correct one. But log an error if more than one is found.
             if ((closest - currentProcess.Id) > (process.Id - currentProcess.Id) || closest == 0)
             {
@@ -317,7 +377,9 @@ public class CompatibilityTools
             }
             if (nonunique) Log.Error($"More than one {executableName} found! Selecting the most likely match with process id {closest}.");
         }
-        if (closest != 0) Log.Information($"Process for {executableName} found using fallback method.");
+        // Deal with rare edge-case where pid rollover causes the ffxiv pid to be lower than XLCore's.
+        if (closest == 0 && early != 0) closest = early;
+        if (closest != 0) Log.Verbose($"Process for {executableName} found using fallback method: {closest}. XLCore pid: {currentProcess.Id}");
         return closest;
     }
 
@@ -342,7 +404,7 @@ public class CompatibilityTools
         {
             Arguments = "-k"
         };
-        psi.Environment.Add("WINEPREFIX", WineSettings.GetWinePrefix());
+        psi.Environment.Add("WINEPREFIX", (WineSettings.IsProton ? Path.Combine(Prefix.FullName, "pfx") : Prefix.FullName));
 
         Process.Start(psi);
     }
