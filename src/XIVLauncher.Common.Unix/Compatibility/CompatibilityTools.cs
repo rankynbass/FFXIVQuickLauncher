@@ -54,6 +54,7 @@ public class CompatibilityTools
         {
             wineoverrides += "d3d9,d3d11,d3d10core,dxgi=b";
         }
+        WineDLLOverrides = wineoverrides;
         wineDirectory = new DirectoryInfo(Path.Combine(toolsFolder.FullName, "wine"));
         dxvkDirectory = new DirectoryInfo(Path.Combine(toolsFolder.FullName, "dxvk"));
         LogFile = logfile;
