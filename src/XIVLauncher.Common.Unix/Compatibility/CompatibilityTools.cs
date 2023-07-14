@@ -37,7 +37,7 @@ public class CompatibilityTools
 
     public bool IsToolDownloaded => File.Exists(WineSettings.RunCommand) && Prefix.Exists;
 
-    public bool IsFlatpak { get; }  // Not currently used.
+    public bool IsFlatpak;  // Not currently used.
 
 
     public CompatibilityTools(WineSettings wineSettings, DxvkSettings dxvkSettings, DirectoryInfo prefix, DirectoryInfo toolsFolder, FileInfo logfile, bool isFlatpak)
@@ -98,7 +98,7 @@ public class CompatibilityTools
         Log.Information($"Using wine at path {WineSettings.RunCommand}");
     }
 
-        private async Task EnsureWine()
+    private async Task EnsureWine()
     {
         if (!WineSettings.IsManaged) return;
 
@@ -390,8 +390,6 @@ public class CompatibilityTools
         var launchArguments = $"winepath --windows \"{unixPath}\"";
         var winePath = (WineSettings.IsProton) ? RunInMinProton("runinprefix", launchArguments) : RunInPrefix(launchArguments, redirectOutput: true);
         var output = winePath.StandardOutput.ReadToEnd();
-        Console.WriteLine($"Getting Wine path for \"{unixPath}\"");
-        Console.WriteLine(output);
         return output.Split('\n', StringSplitOptions.RemoveEmptyEntries).LastOrDefault();
     }
 
@@ -413,7 +411,7 @@ public class CompatibilityTools
         Process.Start(psi);
     }
 
-    public static bool IsDirectoryEmpty(string folder)
+    public bool IsDirectoryEmpty(string folder)
     {
         if (!Directory.Exists(folder)) return true;
         return !Directory.EnumerateFileSystemEntries(folder).Any();
