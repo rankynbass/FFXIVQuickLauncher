@@ -37,7 +37,7 @@ public class CompatibilityTools
 
     public bool IsToolDownloaded => File.Exists(WineSettings.RunCommand) && Prefix.Exists;
 
-    public bool IsFlatpak { get; }
+    public bool IsFlatpak { get; }  // Not currently used.
 
 
     public CompatibilityTools(WineSettings wineSettings, DxvkSettings dxvkSettings, DirectoryInfo prefix, DirectoryInfo toolsFolder, FileInfo logfile, bool isFlatpak)
@@ -77,6 +77,8 @@ public class CompatibilityTools
     {
         if (WineSettings.IsProton)
         {
+            if (!File.Exists(WineSettings.RunCommand))
+                throw new FileNotFoundException("Proton or runtime not found.");
             IsToolReady = true;
             EnsurePrefix();
             return;
@@ -156,6 +158,8 @@ public class CompatibilityTools
             RunInPrefix("cmd /c dir %userprofile%/Documents > nul").WaitForExit();
     }
 
+    // This function only exists to deal with the soldier runtime and to work around a bug where Proton will generate
+    // a bad prefix if the first command used is with "runinprefix".
     public Process RunInMinProton(string verb, string command, bool wineD3D = false)
     {
         var psi = new ProcessStartInfo(WineSettings.MinimalRunCommand);
@@ -173,7 +177,7 @@ public class CompatibilityTools
         var minProton = new Process();
         minProton.StartInfo = psi;
         minProton.Start();
-        Log.Information($"Running minimal proton in prefix: {psi.FileName} {psi.Arguments}");
+        Log.Verbose($"Running minimal proton in prefix: {psi.FileName} {psi.Arguments}");
         return minProton;
     }
 
@@ -182,7 +186,7 @@ public class CompatibilityTools
         var psi = new ProcessStartInfo(WineSettings.RunCommand);
         psi.Arguments = CompactString(WineSettings.RunArguments + (WineSettings.IsProton ? " runinprefix " : " ") + command);
 
-        Log.Information("Running in prefix (string): {FileName} {Arguments}", psi.FileName, psi.Arguments);
+        Log.Verbose("Running in prefix: {FileName} {Arguments}", psi.FileName, psi.Arguments);
         return RunInPrefix(psi, workingDirectory, environment, redirectOutput, writeLog, wineD3D);
     }
 
@@ -196,7 +200,7 @@ public class CompatibilityTools
         foreach (var arg in args)
             if (!string.IsNullOrEmpty(arg)) psi.ArgumentList.Add(arg);
 
-        Log.Information("Running in prefix (array): {FileName} {Arguments}", psi.FileName, psi.ArgumentList.Aggregate(string.Empty, (a, b) => a + " " + b));
+        Log.Verbose("Running in prefix: {FileName} {Arguments}", psi.FileName, psi.ArgumentList.Aggregate(string.Empty, (a, b) => a + " " + b));
         return RunInPrefix(psi, workingDirectory, environment, redirectOutput, writeLog, wineD3D);
     }
 
@@ -276,29 +280,26 @@ public class CompatibilityTools
         MergeDictionaries(psi.Environment, DxvkSettings.Environment);
         MergeDictionaries(psi.Environment, wineEnvironmentVariables);
         MergeDictionaries(psi.Environment, environment);
-        Log.Verbose("Launching with the following environment:");
-        foreach (var kvp in psi.Environment)
-            Log.Verbose(kvp.Key + "=" + kvp.Value);
 
-#if FLATPAK_NOTRIGHTNOW
-        psi.FileName = "flatpak-spawn";
+// #if FLATPAK_NOTRIGHTNOW
+//         psi.FileName = "flatpak-spawn";
 
-        psi.ArgumentList.Insert(0, "--host");
-        psi.ArgumentList.Insert(1, WineSettings.RunCommand);
+//         psi.ArgumentList.Insert(0, "--host");
+//         psi.ArgumentList.Insert(1, WineSettings.RunCommand);
 
-        foreach (KeyValuePair<string, string> envVar in wineEnvironmentVariables)
-        {
-            psi.ArgumentList.Insert(1, $"--env={envVar.Key}={envVar.Value}");
-        }
+//         foreach (KeyValuePair<string, string> envVar in wineEnvironmentVariables)
+//         {
+//             psi.ArgumentList.Insert(1, $"--env={envVar.Key}={envVar.Value}");
+//         }
 
-        if (environment != null)
-        {
-            foreach (KeyValuePair<string, string> envVar in environment)
-            {
-                psi.ArgumentList.Insert(1, $"--env=\"{envVar.Key}\"=\"{envVar.Value}\"");
-            }
-        }
-#endif
+//         if (environment != null)
+//         {
+//             foreach (KeyValuePair<string, string> envVar in environment)
+//             {
+//                 psi.ArgumentList.Insert(1, $"--env=\"{envVar.Key}\"=\"{envVar.Value}\"");
+//             }
+//         }
+// #endif
 
         Process helperProcess = new();
         helperProcess.StartInfo = psi;
@@ -386,9 +387,11 @@ public class CompatibilityTools
 
     public string UnixToWinePath(string unixPath)
     {
-        //var launchArguments = new string[] { "winepath", "--windows", unixPath };
-        var winePath = (WineSettings.IsProton) ? RunInMinProton("getcompatpath", $"\"{unixPath}\"") : RunInPrefix(new string[] { "winepath", "--windows", unixPath }, redirectOutput: true);
+        var launchArguments = $"winepath --windows \"{unixPath}\"";
+        var winePath = (WineSettings.IsProton) ? RunInMinProton("runinprefix", launchArguments) : RunInPrefix(launchArguments, redirectOutput: true);
         var output = winePath.StandardOutput.ReadToEnd();
+        Console.WriteLine($"Getting Wine path for \"{unixPath}\"");
+        Console.WriteLine(output);
         return output.Split('\n', StringSplitOptions.RemoveEmptyEntries).LastOrDefault();
     }
 

@@ -1,13 +1,6 @@
-using System;
 using System.Collections.Generic;
-using System.Collections.Specialized;
-using System.Diagnostics;
 using System.IO;
-using System.Linq;
-using System.Net.Http;
-using System.Threading.Tasks;
 using Serilog;
-using XIVLauncher.Common.Util;
 
 namespace XIVLauncher.Common.Unix.Compatibility;
 
@@ -45,6 +38,8 @@ public class WineSettings
         xlcoreFolder = rootFolder;
         Environment = (env is null) ? new Dictionary<string, string>() : env;
         IsProton = isProton;
+
+        // Use customwine to pass in the custom wine bin/ path. If it's empty, we construct the RunCommand from the folder.
         if (string.IsNullOrEmpty(customWine))
         {
             var wineBinPath = Path.Combine(Path.Combine(rootFolder, "compatibilitytool", "wine"), folder, "bin");
@@ -54,19 +49,20 @@ public class WineSettings
         }
         else
         {
-            if (isProton)
-            {
-                var command = new FileInfo(customWine);
-                RunCommand = command.FullName;
-                WineServer = Path.Combine(command.DirectoryName, "files", "bin", "wineserver");
-            }
-            else
+            if (!isProton)
             {
                 RunCommand = SetWineOrWine64(customWine);
                 WineServer = Path.Combine(customWine, "wineserver");
                 IsManaged = false;
             }
+            else
+            {
+                var command = new FileInfo(customWine);
+                RunCommand = command.FullName;
+                WineServer = Path.Combine(command.DirectoryName, "files", "bin", "wineserver");
+            }
         }
+        // MinimalRunCommand exists exclusively to speed up execution when using soldier runtime (saves several seconds)
         MinimalRunCommand = string.IsNullOrEmpty(minRunCmd) ? RunCommand : minRunCmd;
     }
 
