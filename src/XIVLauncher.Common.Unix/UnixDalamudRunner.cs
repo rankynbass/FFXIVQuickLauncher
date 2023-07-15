@@ -31,10 +31,10 @@ public class UnixDalamudRunner : IDalamudRunner
         Parallel.Invoke(
             () => { gameExePath = compatibility.UnixToWinePath(gameExe.FullName); },
             () => { dotnetRuntimePath = compatibility.UnixToWinePath(dotnetRuntime.FullName); },
+            () => { startInfo.LoggingPath = compatibility.UnixToWinePath(startInfo.LoggingPath); },
             () => { startInfo.WorkingDirectory = compatibility.UnixToWinePath(startInfo.WorkingDirectory); },
             () => { startInfo.ConfigurationPath = compatibility.UnixToWinePath(startInfo.ConfigurationPath); },
             () => { startInfo.PluginDirectory = compatibility.UnixToWinePath(startInfo.PluginDirectory); },
-            () => { startInfo.DefaultPluginDirectory = compatibility.UnixToWinePath(startInfo.DefaultPluginDirectory); },
             () => { startInfo.AssetDirectory = compatibility.UnixToWinePath(startInfo.AssetDirectory); }
         );
 
@@ -45,51 +45,48 @@ public class UnixDalamudRunner : IDalamudRunner
         var launchArguments = new List<string>
         {
             $"\"{runner.FullName}\"",
-            "launch",
-            $"--mode={(loadMethod == DalamudLoadMethod.EntryPoint ? "entrypoint" : "inject")}",
-            $"--game=\"{gameExePath}\"",
-            $"--dalamud-working-directory=\"{startInfo.WorkingDirectory}\"",
-            $"--dalamud-configuration-path=\"{startInfo.ConfigurationPath}\"",
-            $"--dalamud-plugin-directory=\"{startInfo.PluginDirectory}\"",
-            $"--dalamud-dev-plugin-directory=\"{startInfo.DefaultPluginDirectory}\"",
-            $"--dalamud-asset-directory=\"{startInfo.AssetDirectory}\"",
-            $"--dalamud-client-language={(int)startInfo.Language}",
-            $"--dalamud-delay-initialize={startInfo.DelayInitializeMs}",
-            $"--dalamud-tspack-b64={Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(startInfo.TroubleshootingPackData))}",
+            DalamudInjectorArgs.LAUNCH,
+            DalamudInjectorArgs.Mode(loadMethod == DalamudLoadMethod.EntryPoint ? "entrypoint" : "inject"),
+            DalamudInjectorArgs.Game(gameExePath),
+            DalamudInjectorArgs.WorkingDirectory(startInfo.WorkingDirectory),
+            DalamudInjectorArgs.ConfigurationPath(startInfo.ConfigurationPath),
+            DalamudInjectorArgs.LoggingPath(startInfo.LoggingPath),
+            DalamudInjectorArgs.PluginDirectory(startInfo.PluginDirectory),
+            DalamudInjectorArgs.AssetDirectory(startInfo.AssetDirectory),
+            DalamudInjectorArgs.ClientLanguage((int)startInfo.Language),
+            DalamudInjectorArgs.DelayInitialize(startInfo.DelayInitializeMs),
+            DalamudInjectorArgs.TsPackB64(Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(startInfo.TroubleshootingPackData))),
         };
 
         if (loadMethod == DalamudLoadMethod.ACLonly)
-            launchArguments.Add("--without-dalamud");
+            launchArguments.Add(DalamudInjectorArgs.WITHOUT_DALAMUD);
 
         if (fakeLogin)
-            launchArguments.Add("--fake-arguments");
+            launchArguments.Add(DalamudInjectorArgs.FAKE_ARGUMENTS);
 
         if (noPlugins)
-            launchArguments.Add("--no-plugins");
+            launchArguments.Add(DalamudInjectorArgs.NO_PLUGIN);
 
         if (noThirdPlugins)
-            launchArguments.Add("--no-third-plugins");
+            launchArguments.Add(DalamudInjectorArgs.NO_THIRD_PARTY);
 
         launchArguments.Add("--");
         launchArguments.Add(gameArgs);
-       
+
         var dalamudProcess = compatibility.RunInPrefix(string.Join(" ", launchArguments), environment: environment, redirectOutput: true, writeLog: true);
-        var output = "";
-        // We might have to check a couple of lines to get around the message "ERROR: Could Not Get Primary Adapter Handle"
-        while (true)
+
+        // Proton-based wine sometimes throws a meaningless error, as does the ReShade Effects Shader Toggler (REST).
+        // Skip up to two errors (or any two other non-json lines). If the third line is also an error, just continue as normal and catch the error.
+        string output;
+        int dalamudErrorCount = 0;
+        do
         {
             output = dalamudProcess.StandardOutput.ReadLine();
-            Console.WriteLine("DALAMUD " + output);
-            if (output == null)
+            if (output is null)
                 throw new DalamudRunnerException("An internal Dalamud error has occured");
-            if (output.Contains("ERROR"))
-            {
-                Console.WriteLine("DALAMUD Ignoring ERROR, checking next line.");
-                continue;
-            }
-            else
-                break;
-        }
+            Console.WriteLine("[DALAMUD] " + output);         
+            dalamudErrorCount++;
+        } while (!output.StartsWith('{') && dalamudErrorCount <= 2);
 
         new Thread(() =>
         {
@@ -97,52 +94,37 @@ public class UnixDalamudRunner : IDalamudRunner
             {
                 var output = dalamudProcess.StandardOutput.ReadLine();
                 if (output != null)
-                    Console.WriteLine("DALAMUD " + output);
+                    Console.WriteLine("[DALAMUD] " + output);
             }
 
         }).Start();
 
+        // For some reason, if there is a return statement in the try block, then any returns from the catch statment onward will
+        // trigger an exception when XLCore tries to get the exit code. Doing the return *after* the whole try-catch block works, however.
+        int unixPid = 0;
+        int winePid = 0;
         try
         {
             var dalamudConsoleOutput = JsonConvert.DeserializeObject<DalamudConsoleOutput>(output);
-            var unixPid = compatibility.GetUnixProcessId(dalamudConsoleOutput.Pid);
-            if (unixPid == 0)
-            {
-                Log.Error("Using unpatched wine... trying backup method to get pid.");
-                unixPid = compatibility.GetUnixProcessIdByName(gameExe.Name);
-            }
-
-            if (unixPid == 0)
-            {
-                Log.Error("Could not retrive Unix process ID, You should never see this error message. Please file a ticket at http://github.com/rankynbass/XIVLauncher.Core.");
-                return null;
-            }
-
-            var gameProcess = Process.GetProcessById(unixPid);
-            Log.Information($"Got game process handle {gameProcess.Handle} with Unix pid {gameProcess.Id} and Wine pid {dalamudConsoleOutput.Pid}");
-            return gameProcess;
+            winePid = dalamudConsoleOutput.Pid;
+            unixPid = compatibility.GetUnixProcessId(winePid, gameExe.Name);
         }
         catch (JsonReaderException ex)
         {
             Log.Error(ex, $"Couldn't parse Dalamud output: {output}");
+            // Try to get the FFXIV process anyway. That way XIVLauncher can close when FFXIV closes.
+            unixPid = compatibility.GetUnixProcessId(0, gameExe.Name);
+        }
+
+        if (unixPid == 0)
+        {
+            Log.Error("Could not retrive Unix process ID, this feature currently requires a patched wine version.");
             return null;
         }
-        // try
-        // {
-        //     var unixPid = compatibility.GetUnixProcessIdByName(gameExe.Name);
-        //     if (unixPid == 0)
-        //     {
-        //         Log.Error("Could not retrive Unix process ID. You should never see this error message. Please file a ticket at http://github.com/rankynbass/XIVLauncher.Core.");
-        //         return null;            
-        //     }
-        //     var gameProcess = Process.GetProcessById(unixPid);
-        //     Log.Information($"Got game process handle {gameProcess.Handle} with Unix pid {gameProcess.Id}.");
-        //     return gameProcess;
-        // }
-        // catch (Exception ex)
-        // {
-        //     Log.Error(ex, "Something went wrong with Dalamud injection");
-        //     return null;
-        // }
+
+        var gameProcess = Process.GetProcessById(unixPid);
+        var winePidInfo = (winePid == 0) ? string.Empty : $" and Wine pid {winePid}";
+        Log.Verbose($"Got {gameExe.Name} process handle {gameProcess.Handle} with Unix pid {gameProcess.Id}{winePidInfo}.");
+        return gameProcess;
     }
 }
