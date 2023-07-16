@@ -110,10 +110,24 @@ public class CompatibilityTools
 
     private async Task EnsureDxvk()
     {
-        await DownloadTool(dxvkDirectory.FullName, DxvkSettings.Folder, DxvkSettings.DownloadUrl);
+        if (DxvkSettings.IsCustom)
+        {
+            if (!Directory.Exists(DxvkSettings.Folder))
+                throw new FileNotFoundException($"No custom Dxvk folder found at {DxvkSettings.Folder}");
+        }
+        else
+            await DownloadTool(dxvkDirectory.FullName, DxvkSettings.Folder, DxvkSettings.DownloadUrl);
 
+        // 64-bit
         var prefixinstall = Path.Combine(Prefix.FullName, "drive_c", "windows", "system32");
-        var files = new DirectoryInfo(Path.Combine(dxvkDirectory.FullName, DxvkSettings.Folder, "x64")).GetFiles();
+        var files = (DxvkSettings.IsCustom) ? new DirectoryInfo(Path.Combine(DxvkSettings.Folder, "x64")).GetFiles() : new DirectoryInfo(Path.Combine(dxvkDirectory.FullName, DxvkSettings.Folder, "x64")).GetFiles();
+
+        foreach (FileInfo fileName in files)
+            fileName.CopyTo(Path.Combine(prefixinstall, fileName.Name), true);
+
+        // 32-bit, for ffxiv dx9
+        prefixinstall = Path.Combine(Prefix.FullName, "drive_c", "windows", "syswow64");
+        files = (DxvkSettings.IsCustom) ? new DirectoryInfo(Path.Combine(DxvkSettings.Folder, "x32")).GetFiles() : new DirectoryInfo(Path.Combine(dxvkDirectory.FullName, DxvkSettings.Folder, "x32")).GetFiles();
 
         foreach (FileInfo fileName in files)
             fileName.CopyTo(Path.Combine(prefixinstall, fileName.Name), true);
