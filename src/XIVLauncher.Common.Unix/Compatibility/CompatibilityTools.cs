@@ -63,6 +63,15 @@ public class CompatibilityTools
 
     public async Task EnsureTool(DirectoryInfo tempPath)
     {
+        if (Settings.IsProton)
+        {
+            if (!File.Exists(Settings.WinePath))
+                throw new FileNotFoundException("Proton or runtime not found.");
+            IsToolReady = true;
+            EnsurePrefix();
+            return;
+        }
+
         if (!File.Exists(Settings.WinePath))
         {
             Log.Information($"Compatibility tool does not exist, downloading {Settings.DownloadUrl}");
@@ -132,21 +141,59 @@ public class CompatibilityTools
 
     public void EnsurePrefix()
     {
-        RunInPrefix("cmd /c dir %userprofile%/Documents > nul").WaitForExit();
+        if (Settings.IsProton)
+            RunInMinProton("run", "cmd /c dir %userprofile%/Documents > nul").WaitForExit();
+        else
+            RunInPrefix("cmd /c dir %userprofile%/Documents > nul").WaitForExit();
     }
+
+    // This function exists to speed up launch times when using proton with soldier runtime.
+    public Process RunInMinProton(string verb, string command)
+    {
+        var psi = new ProcessStartInfo(Settings.AltWinePath);
+        psi.RedirectStandardOutput = true;
+        psi.RedirectStandardError = true;
+        psi.UseShellExecute = false;
+        psi.Environment.Add("WINEPREFIX", Settings.Prefix.FullName);
+        psi.Environment.Add("STEAM_COMPAT_DATA_PATH", Settings.ProtonPrefix);
+        psi.Environment.Add("STEAM_COMPAT_CLIENT_INSTALL_PATH", Settings.SteamPath);
+        psi.Environment.Add("WINEDLLOVERRIDES", $"msquic=,mscoree=n,b;d3d9,d3d11,d3d10core,dxgi={(DxvkSettings.Enabled ? "n,b" : "b")}");
+ 
+        psi.Arguments = verb + (string.IsNullOrWhiteSpace(command) ? "" : " " + command.Trim());
+       
+        var minProton = new Process();
+        minProton.StartInfo = psi;
+        minProton.Start();
+        Log.Verbose($"Running minimal proton in prefix: {psi.FileName} {psi.Arguments}");
+        return minProton;
+    }    
 
     public Process RunInPrefix(string command, string workingDirectory = "", IDictionary<string, string> environment = null, bool redirectOutput = false, bool writeLog = false, bool wineD3D = false)
     {
         var psi = new ProcessStartInfo(Settings.WinePath);
-        psi.Arguments = command;
+        var sb = new System.Text.StringBuilder();
+        if (Settings.IsProton)
+        {
+            if (!string.IsNullOrEmpty(Settings.Arguments))
+                sb.Append(Settings.Arguments + " ");
+            sb.Append("runinprefix ");
+        }
+        sb.Append(command);
+        psi.Arguments = sb.ToString();
 
-        Log.Verbose("Running in prefix: {FileName} {Arguments}", psi.FileName, command);
+        Log.Verbose("Running in prefix: {FileName} {Arguments}", psi.FileName, psi.Arguments);
         return RunInPrefix(psi, workingDirectory, environment, redirectOutput, writeLog, wineD3D);
     }
 
     public Process RunInPrefix(string[] args, string workingDirectory = "", IDictionary<string, string> environment = null, bool redirectOutput = false, bool writeLog = false, bool wineD3D = false)
     {
         var psi = new ProcessStartInfo(Settings.WinePath);
+        if (Settings.IsProton)
+        {
+            foreach (var param in Settings.Arguments.Split(null as char[], StringSplitOptions.RemoveEmptyEntries))
+                psi.ArgumentList.Add(param);
+            psi.ArgumentList.Add("runinprefix");
+        }
         foreach (var arg in args)
             psi.ArgumentList.Add(arg);
 
@@ -213,11 +260,35 @@ public class CompatibilityTools
         if (this.gamemodeOn)
             wineEnvironmentVariables.Add("LD_PRELOAD", MergeLDPreload("libgamemodeauto.so.0" , Environment.GetEnvironmentVariable("LD_PRELOAD")));
 
-        foreach (var dxvkVar in DxvkSettings.Environment)
-            wineEnvironmentVariables.Add(dxvkVar.Key, dxvkVar.Value);
-        wineEnvironmentVariables.Add("WINEESYNC", Settings.EsyncOn);
-        wineEnvironmentVariables.Add("WINEFSYNC", Settings.FsyncOn);
+        if (!Settings.IsProton)
+        {
+            if (Settings.EsyncOn) wineEnvironmentVariables.Add("WINEESYNC", "1");
+            if (Settings.FsyncOn) wineEnvironmentVariables.Add("WINEFSYNC", "1");
+        }
+        else
+        {
+            DxvkSettings.Environment.Remove("DXVK_CONFIG_FILE");
+            DxvkSettings.Environment.Remove("DXVK_STATE_CACHE_PATH");
+            wineEnvironmentVariables.Add("STEAM_COMPAT_DATA_PATH", Settings.ProtonPrefix);
+            wineEnvironmentVariables.Add("STEAM_COMPAT_CLIENT_INSTALL_PATH", Settings.SteamPath);
+            if (!Settings.FsyncOn)
+            {
+                if (!Settings.EsyncOn)
+                    wineEnvironmentVariables.Add("PROTON_NO_ESYNC", "1");
+                wineEnvironmentVariables.Add("PROTON_NO_FSYNC", "1");
+            }
+            var compatMounts = new System.Text.StringBuilder(System.Environment.GetEnvironmentVariable("STEAM_COMPAT_MOUNTS") ?? "");
+            compatMounts.Append($":{Settings.GamePath}:{Settings.GameConfigPath}:");
+            if (!string.IsNullOrEmpty(Settings.RuntimePath))
+            {
+                var runPath = System.Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR");
+                for (int i = 0; i < 10; i++)
+                    compatMounts.Append($"{runPath}/discord-ipc-{i}:{runPath}/app/com.discordapp.Discord/discord-ipc-{i}:{runPath}/snap.discord-cananry/discord-ipc-{i}:");
+            }
+            wineEnvironmentVariables.Add("STEAM_COMPAT_MOUNTS", compatMounts.ToString().Trim(':'));
+        }
 
+        MergeDictionaries(psi.Environment, DxvkSettings.Environment);
         MergeDictionaries(psi.Environment, wineEnvironmentVariables);
         MergeDictionaries(psi.Environment, extraEnvironmentVars);       // Allow extraEnvironmentVars to override what we set here.
         MergeDictionaries(psi.Environment, environment);
@@ -338,8 +409,8 @@ public class CompatibilityTools
 
     public string UnixToWinePath(string unixPath)
     {
-        var launchArguments = new string[] { "winepath", "--windows", unixPath };
-        var winePath = RunInPrefix(launchArguments, redirectOutput: true);
+        var launchArguments = $"winepath --windows \"{unixPath}\"";
+        var winePath = (Settings.IsProton) ? RunInMinProton("runinprefix", launchArguments) : RunInPrefix(launchArguments, redirectOutput: true);
         var output = winePath.StandardOutput.ReadToEnd();
         return output.Split('\n', StringSplitOptions.RemoveEmptyEntries).LastOrDefault();
     }
