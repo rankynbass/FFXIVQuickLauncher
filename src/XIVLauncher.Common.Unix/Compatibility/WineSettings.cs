@@ -42,27 +42,27 @@ public class WineSettings
     public string ProtonPrefix { get; private set; }
     public string SteamPath { get; private set; }
 
-    public WineSettings(bool isManaged, string customBinPath, string managedFolder, string managedUrl, DirectoryInfo storageFolder, string debugVars, FileInfo logFile, DirectoryInfo prefix, bool? esyncOn, bool? fsyncOn, Dictionary<string, string>? protonInfo)
+    public WineSettings(bool isManaged, string customBinPath, string managedFolder, string managedUrl, DirectoryInfo storageFolder, string debugVars, FileInfo logFile, DirectoryInfo prefix, bool? esyncOn, bool? fsyncOn, ProtonSettings? protonInfo)
     {
         // storageFolder is the path to .xlcore folder. managedFolder is the foldername inside the tarball that will be downloaded from managedUrl.
         IsManaged = isManaged;
         IsProton = protonInfo is not null;
         FolderName = managedFolder;
         DownloadUrl = managedUrl;
-        BinPath = IsProton ? protonInfo["ProtonPath"] : (isManaged ? Path.Combine(storageFolder.FullName, "compatibilitytool", "wine", managedFolder, "bin") : customBinPath);
+        BinPath = IsProton ? protonInfo.ProtonPath : (isManaged ? Path.Combine(storageFolder.FullName, "compatibilitytool", "wine", managedFolder, "bin") : customBinPath);
         WineServerPath = IsProton ? Path.Combine(BinPath, "files", "bin", "wineserver") : Path.Combine(BinPath, "wineserver");
 
         EsyncOn = esyncOn ?? false;
         FsyncOn = fsyncOn ?? false;
         DebugVars = debugVars;
         LogFile = logFile;
-        Prefix = IsProton ? new DirectoryInfo(Path.Combine(protonInfo["Prefix"], "pfx")) : prefix;
-        ProtonPrefix = IsProton ? protonInfo["Prefix"] : "";
+        Prefix = IsProton ? new DirectoryInfo(Path.Combine(protonInfo.Prefix.FullName, "pfx")) : prefix;
+        ProtonPrefix = IsProton ? protonInfo.Prefix.FullName : "";
 
-        SteamPath = IsProton ? protonInfo["SteamPath"] : "";
+        SteamPath = IsProton ? protonInfo.SteamPath : "";
         WinePath = IsProton ? Path.Combine(BinPath, "proton") : File.Exists(Path.Combine(BinPath, "wine64")) ? Path.Combine(BinPath, "wine64") : Path.Combine(BinPath, "wine");
         AltWinePath = WinePath;
-        RuntimePath = IsProton ? protonInfo["RuntimePath"] : "";
+        RuntimePath = IsProton ? protonInfo.RuntimePath : "";
         Arguments = "";
         if (!string.IsNullOrEmpty(RuntimePath))
         {
@@ -70,7 +70,7 @@ public class WineSettings
             Arguments = $"--verb=waitforexitandrun -- \"{Path.Combine(BinPath, "proton")}\"";
             WinePath = binary;
         }
-        GamePath = IsProton ? protonInfo["GamePath"] : "";
-        GameConfigPath = IsProton ? protonInfo["GameConfigPath"] : "";
+        GamePath = IsProton ? protonInfo.GamePath.FullName : "";
+        GameConfigPath = IsProton ? protonInfo.GameConfigPath.FullName : "";
     }
 }
