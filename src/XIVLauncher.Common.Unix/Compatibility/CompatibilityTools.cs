@@ -75,7 +75,7 @@ public class CompatibilityTools
         if (!File.Exists(Settings.WinePath))
         {
             Log.Information($"Compatibility tool does not exist, downloading {Settings.DownloadUrl}");
-            await DownloadTool(wineDirectory, Settings.DownloadUrl).ConfigureAwait(false);
+            await DownloadWine().ConfigureAwait(false);
         }
         EnsurePrefix();
         
@@ -85,13 +85,23 @@ public class CompatibilityTools
         IsToolReady = true;
     }
 
+    public async Task DownloadWine()
+    {
+        await DownloadTool(wineDirectory, Settings.DownloadUrl).ConfigureAwait(false);
+    }
+
+    public async Task DownloadDxvk()
+    {
+        await DownloadTool(dxvkDirectory, DxvkSettings.DownloadUrl).ConfigureAwait(false);
+    }
+
     private async Task InstallDxvk()
     {
         var dxvkPath = Path.Combine(dxvkDirectory.FullName, DxvkSettings.FolderName, "x64");
         if (!Directory.Exists(dxvkPath))
         {
             Log.Information($"DXVK does not exist, downloading {DxvkSettings.DownloadUrl}");
-            await DownloadTool(dxvkDirectory, DxvkSettings.DownloadUrl).ConfigureAwait(false);
+            await DownloadDxvk().ConfigureAwait(false);
         }
 
         var system32 = Path.Combine(Settings.Prefix.FullName, "drive_c", "windows", "system32");
