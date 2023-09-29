@@ -267,8 +267,9 @@ public class CompatibilityTools
 
         wineEnvironmentVariables.Add("XL_WINEONLINUX", "true");
 
+        var ldpreload = MergeLDPreload(Environment.GetEnvironmentVariable("XL_PRELOAD"), Environment.GetEnvironmentVariable("LD_PRELOAD"));
         if (this.gamemodeOn)
-            wineEnvironmentVariables.Add("LD_PRELOAD", MergeLDPreload("libgamemodeauto.so.0" , Environment.GetEnvironmentVariable("LD_PRELOAD")));
+            wineEnvironmentVariables.Add("LD_PRELOAD", MergeLDPreload("libgamemodeauto.so.0" , ldpreload));
 
         if (!Settings.IsProton)
         {
