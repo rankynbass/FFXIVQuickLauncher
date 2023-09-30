@@ -289,7 +289,7 @@ public class CompatibilityTools
                 wineEnvironmentVariables.Add("PROTON_NO_FSYNC", "1");
             }
             var compatMounts = new System.Text.StringBuilder(System.Environment.GetEnvironmentVariable("STEAM_COMPAT_MOUNTS") ?? "");
-            compatMounts.Append($":{Settings.GamePath}:{Settings.GameConfigPath}:");
+            compatMounts.Append($":{Settings.GameConfigPath}:");
             if (!string.IsNullOrEmpty(Settings.RuntimePath))
             {
                 var runPath = System.Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR");
