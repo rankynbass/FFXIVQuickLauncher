@@ -278,6 +278,10 @@ public class CompatibilityTools
         }
         else
         {
+            if (wineD3D)
+            {
+                DxvkSettings.Environment.Add("PROTON_USE_WINED3D", "1");
+            }
             DxvkSettings.Environment.Remove("DXVK_CONFIG_FILE");
             DxvkSettings.Environment.Remove("DXVK_STATE_CACHE_PATH");
             wineEnvironmentVariables.Add("STEAM_COMPAT_DATA_PATH", Settings.ProtonPrefix);
