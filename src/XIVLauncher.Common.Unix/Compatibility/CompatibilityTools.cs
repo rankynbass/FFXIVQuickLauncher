@@ -292,15 +292,18 @@ public class CompatibilityTools
                     wineEnvironmentVariables.Add("PROTON_NO_ESYNC", "1");
                 wineEnvironmentVariables.Add("PROTON_NO_FSYNC", "1");
             }
-            var compatMounts = new System.Text.StringBuilder(System.Environment.GetEnvironmentVariable("STEAM_COMPAT_MOUNTS") ?? "");
-            compatMounts.Append($":{Settings.GameConfigPath}:");
             if (!string.IsNullOrEmpty(Settings.RuntimePath))
             {
-                var runPath = System.Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR");
-                for (int i = 0; i < 10; i++)
-                    compatMounts.Append($"{runPath}/discord-ipc-{i}:{runPath}/app/com.discordapp.Discord/discord-ipc-{i}:{runPath}/snap.discord-cananry/discord-ipc-{i}:");
+                var compatMounts = new System.Text.StringBuilder(System.Environment.GetEnvironmentVariable("STEAM_COMPAT_MOUNTS") ?? "");
+                compatMounts.Append($":{Settings.GameConfigPath}:");
+                if (!string.IsNullOrEmpty(Settings.RuntimePath))
+                {
+                    var runPath = System.Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR");
+                    for (int i = 0; i < 10; i++)
+                        compatMounts.Append($"{runPath}/discord-ipc-{i}:{runPath}/app/com.discordapp.Discord/discord-ipc-{i}:{runPath}/snap.discord-cananry/discord-ipc-{i}:");
+                }
+                wineEnvironmentVariables.Add("STEAM_COMPAT_MOUNTS", compatMounts.ToString().Trim(':'));
             }
-            wineEnvironmentVariables.Add("STEAM_COMPAT_MOUNTS", compatMounts.ToString().Trim(':'));
         }
 
         MergeDictionaries(psi.Environment, DxvkSettings.Environment);
