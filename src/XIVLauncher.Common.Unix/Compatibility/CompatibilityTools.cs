@@ -167,7 +167,7 @@ public class CompatibilityTools
         psi.Environment.Add("WINEPREFIX", Settings.Prefix.FullName);
         psi.Environment.Add("STEAM_COMPAT_DATA_PATH", Settings.ProtonPrefix);
         psi.Environment.Add("STEAM_COMPAT_CLIENT_INSTALL_PATH", Settings.SteamPath);
-        psi.Environment.Add("WINEDLLOVERRIDES", $"msquic=,mscoree=n,b;d3d9,d3d11,d3d10core,dxgi={(DxvkSettings.Enabled ? "n,b" : "b")}");
+        psi.Environment.Add("WINEDLLOVERRIDES", $"msquic=,mscoree=n,b;d3d9,d3d11,d3d10core,{(DxvkSettings.VKD3DEnabled && DxvkSettings.Enabled ? ",d3d12," : "")}dxgi={(DxvkSettings.Enabled ? "n,b" : "b")}");
  
         psi.Arguments = verb + (string.IsNullOrWhiteSpace(command) ? "" : " " + command.Trim());
        
@@ -258,7 +258,7 @@ public class CompatibilityTools
 
         var wineEnvironmentVariables = new Dictionary<string, string>();
         wineEnvironmentVariables.Add("WINEPREFIX", Settings.Prefix.FullName);
-        wineEnvironmentVariables.Add("WINEDLLOVERRIDES", $"msquic=,mscoree=n,b;d3d9,d3d11,d3d10core,dxgi={(wineD3D ? "b" : "n,b")}");
+        wineEnvironmentVariables.Add("WINEDLLOVERRIDES", $"msquic=,mscoree=n,b;d3d9,d3d11,d3d10core,{(DxvkSettings.VKD3DEnabled && wineD3D ? ",d3d12," : "")}dxgi={(wineD3D ? "b" : "n,b")}");
 
         if (!string.IsNullOrEmpty(Settings.DebugVars))
         {

@@ -10,17 +10,20 @@ public class DxvkSettings
 {
     public bool Enabled { get; }
 
+    public bool VKD3DEnabled { get; }
+
     public string FolderName { get; }
 
     public string DownloadUrl { get; }
 
     public Dictionary<string, string> Environment { get; }
 
-    public DxvkSettings(string folder, string url, string storageFolder, bool async, int maxFrameRate, bool dxvkHudEnabled, string dxvkHudString, bool mangoHudEnabled = false, bool mangoHudCustomIsFile = false, string customMangoHud = "", bool enabled = true)
+    public DxvkSettings(string folder, string url, string storageFolder, bool async, int maxFrameRate, bool dxvkHudEnabled, string dxvkHudString, bool mangoHudEnabled = false, bool mangoHudCustomIsFile = false, string customMangoHud = "", bool enabled = true, bool vkd3d = false)
     {
         FolderName = folder;
         DownloadUrl = url;
         Enabled = enabled;
+        VKD3DEnabled = vkd3d;
 
         var dxvkConfigPath = new DirectoryInfo(Path.Combine(storageFolder, "compatibilitytool", "dxvk"));
         Environment = new Dictionary<string, string>
