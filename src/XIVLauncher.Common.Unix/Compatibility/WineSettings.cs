@@ -68,10 +68,9 @@ public class WineSettings
             Arguments = $"--verb=waitforexitandrun -- \"{Path.Combine(BinPath, "proton")}\"";
             WinePath = binary;
         }
-        var sb = new System.Text.StringBuilder();
+        SteamCompatMounts = "";
         if (protonInfo is not null)
             foreach(var mount in protonInfo.SteamCompatMounts)
-                sb.Append(mount + ":");
-        SteamCompatMounts = sb.ToString();
+                SteamCompatMounts += (mount + ":");
     }
 }
