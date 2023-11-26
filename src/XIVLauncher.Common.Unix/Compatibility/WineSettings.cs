@@ -69,8 +69,9 @@ public class WineSettings
             WinePath = binary;
         }
         var sb = new System.Text.StringBuilder();
-        foreach(var mount in protonInfo.SteamCompatMounts)
-            sb.Append(mount + ":");
+        if (protonInfo is not null)
+            foreach(var mount in protonInfo.SteamCompatMounts)
+                sb.Append(mount + ":");
         SteamCompatMounts = sb.ToString();
     }
 }
