@@ -1,4 +1,7 @@
+#nullable enable
 using System.IO;
+using System.Collections.Generic;
+
 
 namespace XIVLauncher.Common.Unix.Compatibility;
 
@@ -12,11 +15,9 @@ public class ProtonSettings
 
     public DirectoryInfo Prefix { get; private set; }
 
-    public DirectoryInfo GamePath { get; private set; }
+    public List<string>? SteamCompatMounts { get; private set; }
 
-    public DirectoryInfo GameConfigPath { get; private set; }
-
-    public ProtonSettings(string? steamPath, string protonPath, string runtimePath, DirectoryInfo prefix, DirectoryInfo? gamePath, DirectoryInfo? gameConfig)
+    public ProtonSettings(string? steamPath, string protonPath, string runtimePath, DirectoryInfo prefix, List<string>? compatMounts)
     {
         // none of these should ever actually be null, but this stops the editor and compiler from complaining.
         var home = System.Environment.GetEnvironmentVariable("HOME") ?? "";
@@ -24,7 +25,7 @@ public class ProtonSettings
         ProtonPath = protonPath;
         RuntimePath = runtimePath;
         Prefix = prefix;
-        GamePath = gamePath ?? new DirectoryInfo(Path.Combine(home, ".xlcore", "ffxiv"));
-        GameConfigPath = gameConfig ?? new DirectoryInfo(Path.Combine(home, ".xlcore", "ffxivConfig"));
+        SteamCompatMounts = compatMounts;
     }
 }
+#nullable restore

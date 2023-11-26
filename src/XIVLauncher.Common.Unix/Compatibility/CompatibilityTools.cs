@@ -295,7 +295,7 @@ public class CompatibilityTools
             if (!string.IsNullOrEmpty(Settings.RuntimePath))
             {
                 var compatMounts = new System.Text.StringBuilder(System.Environment.GetEnvironmentVariable("STEAM_COMPAT_MOUNTS") ?? "");
-                compatMounts.Append($":{Settings.GameConfigPath}:");
+                compatMounts.Append($":{Settings.SteamCompatMounts}");
                 if (!string.IsNullOrEmpty(Settings.RuntimePath))
                 {
                     var runPath = System.Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR");

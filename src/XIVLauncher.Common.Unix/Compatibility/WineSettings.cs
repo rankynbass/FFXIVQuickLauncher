@@ -35,9 +35,7 @@ public class WineSettings
 
     public DirectoryInfo Prefix { get; private set; }
 
-    public string GamePath { get; private set; }
-
-    public string GameConfigPath { get; private set; }
+    public string SteamCompatMounts { get; private set; }
 
     public string ProtonPrefix { get; private set; }
     public string SteamPath { get; private set; }
@@ -70,7 +68,9 @@ public class WineSettings
             Arguments = $"--verb=waitforexitandrun -- \"{Path.Combine(BinPath, "proton")}\"";
             WinePath = binary;
         }
-        GamePath = IsProton ? protonInfo.GamePath.FullName : "";
-        GameConfigPath = IsProton ? protonInfo.GameConfigPath.FullName : "";
+        var sb = new System.Text.StringBuilder();
+        foreach(var mount in protonInfo.SteamCompatMounts)
+            sb.Append(mount + ":");
+        SteamCompatMounts = sb.ToString();
     }
 }
