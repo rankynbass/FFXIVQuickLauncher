@@ -31,16 +31,22 @@ public class CompatibilityTools
     public bool IsToolDownloaded => File.Exists(Settings.WinePath) && Settings.Prefix.Exists;
 
     public bool IsFlatpak { get; }
+
+    private string GamePath;
+
+    private string GameConfigPath;
     
     private readonly bool gamemodeOn;
 
     private Dictionary<string, string> extraEnvironmentVars;
 
-    public CompatibilityTools(WineSettings wineSettings, DxvkSettings dxvkSettings, bool? gamemodeOn, DirectoryInfo toolsFolder, bool isFlatpak, Dictionary<string, string> extraEnvVars = null)
+    public CompatibilityTools(WineSettings wineSettings, DxvkSettings dxvkSettings, bool? gamemodeOn, DirectoryInfo toolsFolder, bool isFlatpak, string gamePath, string gameConfigPath, Dictionary<string, string> extraEnvVars = null)
     {
         this.Settings = wineSettings;
         this.DxvkSettings = dxvkSettings;
         this.gamemodeOn = gamemodeOn ?? false;
+        this.GamePath = gamePath;
+        this.GameConfigPath = gameConfigPath;
 
         // These are currently unused. Here for future use. 
         this.IsFlatpak = isFlatpak;
@@ -59,10 +65,20 @@ public class CompatibilityTools
 
         if (!wineSettings.Prefix.Exists)
             wineSettings.Prefix.Create();
+
     }
 
     public async Task EnsureTool(DirectoryInfo tempPath)
     {
+        if (Settings.IsULWGL)
+        {
+            if (!File.Exists(Settings.WinePath))
+                throw new FileNotFoundException("Proton or runtime not found.");
+            IsToolReady = true;
+            EnsurePrefix();
+            return;
+        }
+
         if (!File.Exists(Settings.WinePath))
         {
             Log.Information($"Compatibility tool does not exist, downloading {Settings.DownloadUrl}");
@@ -93,7 +109,7 @@ public class CompatibilityTools
             File.Copy(fileName, Path.Combine(system32, Path.GetFileName(fileName)), true);
         }
 
-        // 32-bit files for Directx9.
+        // 32-bit files
         var dxvkPath32 = Path.Combine(dxvkDirectory.FullName, DxvkSettings.FolderName, "x32");
         var syswow64 = Path.Combine(Settings.Prefix.FullName, "drive_c", "windows", "syswow64");
 
@@ -130,9 +146,32 @@ public class CompatibilityTools
         EnsurePrefix();
     }
 
+    public Process RunInMinProton(string verb, string command)
+    {
+        var psi = new ProcessStartInfo(Path.Combine(Settings.ProtonPath, "proton"));
+        psi.RedirectStandardOutput = true;
+        psi.RedirectStandardError = true;
+        psi.UseShellExecute = false;
+        psi.Environment.Add("WINEPREFIX", Settings.Prefix.FullName);
+        psi.Environment.Add("STEAM_COMPAT_DATA_PATH", Settings.Prefix.FullName);
+        psi.Environment.Add("STEAM_COMPAT_CLIENT_INSTALL_PATH", "");
+        psi.Environment.Add("WINEDLLOVERRIDES", $"msquic=,mscoree=n,b;d3d9,d3d11,d3d10core,dxgi={(DxvkSettings.Enabled ? "n,b" : "b")}");
+ 
+        psi.Arguments = verb + (string.IsNullOrWhiteSpace(command) ? "" : " " + command.Trim());
+       
+        var minProton = new Process();
+        minProton.StartInfo = psi;
+        minProton.Start();
+        Log.Verbose($"Running minimal proton in prefix: {psi.FileName} {psi.Arguments}");
+        return minProton;
+    }    
+
     public void EnsurePrefix()
     {
-        RunInPrefix("cmd /c dir %userprofile%/Documents > nul").WaitForExit();
+        if (Settings.IsULWGL)
+            RunInMinProton("run", "cmd /c dir %userprofile%/Documents > nul").WaitForExit();
+        else
+            RunInPrefix("cmd /c dir %userprofile%/Documents > nul").WaitForExit();
     }
 
     public Process RunInPrefix(string command, string workingDirectory = "", IDictionary<string, string> environment = null, bool redirectOutput = false, bool writeLog = false, bool wineD3D = false)
@@ -140,6 +179,7 @@ public class CompatibilityTools
         var psi = new ProcessStartInfo(Settings.WinePath);
         psi.Arguments = command;
 
+        Console.WriteLine($"Running in prefix: {psi.FileName} {command}");
         Log.Verbose("Running in prefix: {FileName} {Arguments}", psi.FileName, command);
         return RunInPrefix(psi, workingDirectory, environment, redirectOutput, writeLog, wineD3D);
     }
@@ -150,6 +190,7 @@ public class CompatibilityTools
         foreach (var arg in args)
             psi.ArgumentList.Add(arg);
 
+        Console.WriteLine($"Running in prefix: {psi.FileName} {psi.ArgumentList.Aggregate(string.Empty, (a, b) => a + " " + b)}");
         Log.Verbose("Running in prefix: {FileName} {Arguments}", psi.FileName, psi.ArgumentList.Aggregate(string.Empty, (a, b) => a + " " + b));
         return RunInPrefix(psi, workingDirectory, environment, redirectOutput, writeLog, wineD3D);
     }
@@ -217,6 +258,16 @@ public class CompatibilityTools
             wineEnvironmentVariables.Add(dxvkVar.Key, dxvkVar.Value);
         wineEnvironmentVariables.Add("WINEESYNC", Settings.EsyncOn);
         wineEnvironmentVariables.Add("WINEFSYNC", Settings.FsyncOn);
+
+        if (Settings.IsULWGL)
+        {
+            wineEnvironmentVariables.Add("PROTONPATH", Settings.ProtonPath);
+            wineEnvironmentVariables.Add("GAMEID", "xivlauncher");
+            if (!wineEnvironmentVariables.ContainsKey("PROTON_VERB"))
+                wineEnvironmentVariables.Add("PROTON_VERB", "runinprefix");
+            var pvfs = Environment.GetEnvironmentVariable("PRESSURE_VESSEL_FILESYSTEMS_RW") ?? "";
+            wineEnvironmentVariables.Add("PRESSURE_VESSEL_FILESYSTEMS_RW", $"{pvfs}:{GamePath}:{GameConfigPath}");
+        }
 
         MergeDictionaries(psi.Environment, wineEnvironmentVariables);
         MergeDictionaries(psi.Environment, extraEnvironmentVars);       // Allow extraEnvironmentVars to override what we set here.
@@ -338,16 +389,17 @@ public class CompatibilityTools
 
     public string UnixToWinePath(string unixPath)
     {
-        var launchArguments = new string[] { "winepath", "--windows", unixPath };
-        var winePath = RunInPrefix(launchArguments, redirectOutput: true);
+        var launchArguments = $"winepath --windows \"{unixPath}\"";
+        var winePath = (Settings.IsULWGL) ? RunInMinProton("runinprefix", launchArguments) : RunInPrefix(launchArguments, redirectOutput: true);
         var output = winePath.StandardOutput.ReadToEnd();
         return output.Split('\n', StringSplitOptions.RemoveEmptyEntries).LastOrDefault();
     }
 
     public void AddRegistryKey(string key, string value, string data)
     {
+        var environment = new Dictionary<string, string>{{"PROTON_VERB","runinprefix"}};
         var args = new string[] { "reg", "add", key, "/v", value, "/d", data, "/f" };
-        var wineProcess = RunInPrefix(args);
+        var wineProcess = RunInPrefix(args, environment: environment);
         wineProcess.WaitForExit();
     }
 
