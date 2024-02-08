@@ -64,8 +64,10 @@ public class CompatibilityTools
             this.dxvkDirectory.Create();
 
         if (!wineSettings.Prefix.Exists)
+        {
             wineSettings.Prefix.Create();
-
+            Directory.CreateSymbolicLink(Path.Combine(wineSettings.Prefix.FullName, "pfx"), ".");
+        }
     }
 
     public async Task EnsureTool(DirectoryInfo tempPath)
@@ -109,7 +111,7 @@ public class CompatibilityTools
             File.Copy(fileName, Path.Combine(system32, Path.GetFileName(fileName)), true);
         }
 
-        // 32-bit files
+        // 32-bit files (still might be needed for extra programs to be run, even with dx9 being removed)
         var dxvkPath32 = Path.Combine(dxvkDirectory.FullName, DxvkSettings.FolderName, "x32");
         var syswow64 = Path.Combine(Settings.Prefix.FullName, "drive_c", "windows", "syswow64");
 
@@ -143,11 +145,15 @@ public class CompatibilityTools
             Settings.Prefix.Delete(true);
 
         Settings.Prefix.Create();
+        Directory.CreateSymbolicLink(Settings.Prefix.FullName, ".");
         EnsurePrefix();
     }
 
     public Process RunInMinProton(string verb, string command)
     {
+        // It is possible to do everything inside of ULWGL, but certain tasks are *very* slow, and do not require
+        // the runtime to produce the correct output or result. This function will run proton without the runtime
+        // for those use cases, notably prefix creation/update and finding windows-style paths.
         var psi = new ProcessStartInfo(Path.Combine(Settings.ProtonPath, "proton"));
         psi.RedirectStandardOutput = true;
         psi.RedirectStandardError = true;
@@ -168,6 +174,8 @@ public class CompatibilityTools
 
     public void EnsurePrefix()
     {
+        // It can take upwards of 5 seconds to run this within the runtime, even if the prefix is already created.
+        // Use RunInMinProton instead.
         if (Settings.IsULWGL)
             RunInMinProton("run", "cmd /c dir %userprofile%/Documents > nul").WaitForExit();
         else
@@ -179,7 +187,6 @@ public class CompatibilityTools
         var psi = new ProcessStartInfo(Settings.WinePath);
         psi.Arguments = command;
 
-        Console.WriteLine($"Running in prefix: {psi.FileName} {command}");
         Log.Verbose("Running in prefix: {FileName} {Arguments}", psi.FileName, command);
         return RunInPrefix(psi, workingDirectory, environment, redirectOutput, writeLog, wineD3D);
     }
@@ -190,7 +197,6 @@ public class CompatibilityTools
         foreach (var arg in args)
             psi.ArgumentList.Add(arg);
 
-        Console.WriteLine($"Running in prefix: {psi.FileName} {psi.ArgumentList.Aggregate(string.Empty, (a, b) => a + " " + b)}");
         Log.Verbose("Running in prefix: {FileName} {Arguments}", psi.FileName, psi.ArgumentList.Aggregate(string.Empty, (a, b) => a + " " + b));
         return RunInPrefix(psi, workingDirectory, environment, redirectOutput, writeLog, wineD3D);
     }
@@ -389,6 +395,8 @@ public class CompatibilityTools
 
     public string UnixToWinePath(string unixPath)
     {
+        // It can take an extra second or two to run this inside the runtime, and all we want is a path.
+        // Use RunInMinProton and it's almost instant.
         var launchArguments = $"winepath --windows \"{unixPath}\"";
         var winePath = (Settings.IsULWGL) ? RunInMinProton("runinprefix", launchArguments) : RunInPrefix(launchArguments, redirectOutput: true);
         var output = winePath.StandardOutput.ReadToEnd();
@@ -397,9 +405,10 @@ public class CompatibilityTools
 
     public void AddRegistryKey(string key, string value, string data)
     {
-        var environment = new Dictionary<string, string>{{"PROTON_VERB","runinprefix"}};
-        var args = new string[] { "reg", "add", key, "/v", value, "/d", data, "/f" };
-        var wineProcess = RunInPrefix(args, environment: environment);
+        // We don't really need the runtime, and we'd like this to be fast.
+        // Use RunInMinProton.
+        var args = $"reg add {key} /v {value} /d  \"{data}\" /f";
+        var wineProcess = (Settings.IsULWGL) ? RunInMinProton("run", args) : RunInPrefix(args);
         wineProcess.WaitForExit();
     }
 
