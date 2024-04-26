@@ -26,7 +26,6 @@ public class DxvkSettings
         Environment = new Dictionary<string, string>
         {
             { "DXVK_LOG_PATH", Path.Combine(storageFolder, "logs") },
-            { "DXVK_CONFIG_FILE", Path.Combine(dxvkConfigPath.FullName, "dxvk.conf") },
         };
         
         if (maxFrameRate != 0)
@@ -34,10 +33,6 @@ public class DxvkSettings
         
         if (async)
             Environment.Add("DXVK_ASYNC", "1");
-        
-        var dxvkCachePath = new DirectoryInfo(Path.Combine(dxvkConfigPath.FullName, "cache"));
-        if (!dxvkCachePath.Exists) dxvkCachePath.Create();
-        Environment.Add("DXVK_STATE_CACHE_PATH", Path.Combine(dxvkCachePath.FullName, folder));
 
         if (dxvkHudEnabled)
             Environment.Add("DXVK_HUD", DxvkHudStringIsValid(dxvkHudString) ? dxvkHudString : "1");
