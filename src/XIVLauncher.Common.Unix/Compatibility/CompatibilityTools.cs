@@ -77,17 +77,17 @@ public class CompatibilityTools
     {
         if (Settings.IsProton)
         {
-            if (!File.Exists(Settings.QuickRunner))
+            if (!File.Exists(Settings.WinePath))
                 throw new FileNotFoundException("Selected proton version not found");
             IsToolReady = true;
             EnsurePrefix();
             return;
         }
 
-        if (!File.Exists(Settings.QuickRunner))
+        if (!File.Exists(Settings.WinePath))
         {
             if (!Settings.IsManaged)
-                throw new FileNotFoundException($"There was not wine or wine64 at the given path: {Settings.QuickRunner}");
+                throw new FileNotFoundException($"There was not wine or wine64 at the given path: {Settings.WinePath}");
             Log.Information($"Compatibility tool does not exist, downloading {Settings.DownloadUrl}");
             await DownloadTool(wineDirectory, Settings.DownloadUrl).ConfigureAwait(false);
         }
@@ -165,7 +165,7 @@ public class CompatibilityTools
     // to do a few basic things like checking paths and initializing the prefix; no need to load the container.
     public Process RunWithoutContainer(string command, bool runinprefix = true)
     {
-        var psi = new ProcessStartInfo(Settings.QuickRunner);
+        var psi = new ProcessStartInfo(Settings.WinePath);
         psi.RedirectStandardOutput = true;
         psi.RedirectStandardError = true;
         psi.UseShellExecute = false;
@@ -176,7 +176,7 @@ public class CompatibilityTools
             psi.Environment.Add("STEAM_COMPAT_INSTALL_PATH", "");
         }
         psi.Environment.Add("WINEDLLOVERRIDES", $"msquic=,mscoree=n,b;d3d9,d3d11,d3d10core,dxgi={(DxvkSettings.Enabled ? "n,b" : "b")}");
-        psi.Arguments = runinprefix ? Settings.QuickRunInPrefixArgs + command : Settings.QuickRunArgs + command;
+        psi.Arguments = runinprefix ? Settings.RunInPrefix + command : Settings.Run + command;
         var quickRun = new Process();
         quickRun.StartInfo = psi;
         quickRun.Start();
@@ -186,8 +186,8 @@ public class CompatibilityTools
 
     public Process RunInPrefix(string command, string workingDirectory = "", IDictionary<string, string> environment = null, bool redirectOutput = false, bool writeLog = false, bool wineD3D = false)
     {
-        var psi = new ProcessStartInfo(Settings.WinePath);
-        psi.Arguments = (Settings.IsProton && !Settings.IsUsingContainer) ? Settings.QuickRunInPrefixArgs + command : command;
+        var psi = new ProcessStartInfo(Settings.Runner);
+        psi.Arguments = (Settings.IsProton && !Settings.IsUmu) ? Settings.RunInPrefix + command : command;
 
         Log.Verbose("Running in prefix: {FileName} {Arguments}", psi.FileName, command);
         return RunInPrefix(psi, workingDirectory, environment, redirectOutput, writeLog, wineD3D);
@@ -195,9 +195,9 @@ public class CompatibilityTools
 
     public Process RunInPrefix(string[] args, string workingDirectory = "", IDictionary<string, string> environment = null, bool redirectOutput = false, bool writeLog = false, bool wineD3D = false)
     {
-        var psi = new ProcessStartInfo(Settings.WinePath);
-        if (Settings.IsProton && !Settings.IsUsingContainer)
-            psi.ArgumentList.Add(Settings.QuickRunInPrefixArgs.Trim());
+        var psi = new ProcessStartInfo(Settings.Runner);
+        if (Settings.IsProton && !Settings.IsUmu)
+            psi.ArgumentList.Add(Settings.RunInPrefix.Trim());
         foreach (var arg in args)
             psi.ArgumentList.Add(arg);
 
@@ -252,9 +252,10 @@ public class CompatibilityTools
 
         var wineEnvironmentVariables = new Dictionary<string, string>();
         wineEnvironmentVariables.Add("WINEPREFIX", Settings.Prefix.FullName);
-        if (Settings.IsUsingContainer)
+        if (Settings.IsUmu)
         {
-            wineEnvironmentVariables.Add("GAMEID", GAMEID);
+            wineEnvironmentVariables.Add("GAMEID", "XIVLauncher.Core");
+            wineEnvironmentVariables.Add("PROTONPATH", new FileInfo(Settings.WinePath).DirectoryName);
             var importantPaths = new System.Text.StringBuilder(GamePath.FullName + ":" + GameConfigPath.FullName);
             var steamCompatMounts = System.Environment.GetEnvironmentVariable("STEAM_COMPAT_MOUNTS");
             var pressureVesselFilesystems = System.Environment.GetEnvironmentVariable("PRESSURE_VESSEL_FILESYSTEMS_RW");
@@ -391,7 +392,10 @@ public class CompatibilityTools
 
     public Int32 GetUnixProcessId(Int32 winePid)
     {
-        var wineDbg = RunInPrefix("winedbg --command \"info procmap\"", redirectOutput: true);
+        var environment = new Dictionary<string, string>();
+        if (Settings.IsUmu)
+            environment.Add("PROTON_VERB", "runinprefix");
+        var wineDbg = RunInPrefix("winedbg --command \"info procmap\"", redirectOutput: true, environment: environment);
         var output = wineDbg.StandardOutput.ReadToEnd();
         if (output.Contains("syntax error\n") || output.Contains("Exception c0000005")) // Proton8 wine changed the error message
         {
@@ -406,7 +410,10 @@ public class CompatibilityTools
 
     private string GetProcessName(Int32 winePid)
     {
-        var wineDbg = RunInPrefix("winedbg --command \"info proc\"", redirectOutput: true);
+        var environment = new Dictionary<string, string>();
+        if (Settings.IsUmu)
+            environment.Add("PROTON_VERB", "runinprefix");
+        var wineDbg = RunInPrefix("winedbg --command \"info proc\"", redirectOutput: true, environment: environment);
         var output = wineDbg.StandardOutput.ReadToEnd();
         var matchingLines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries).Skip(1).Where(
             l => int.Parse(l.Substring(1, 8), System.Globalization.NumberStyles.HexNumber) == winePid);
