@@ -20,6 +20,8 @@ public class CompatibilityTools
     
     private DirectoryInfo dxvkDirectory;
 
+    private DirectoryInfo compatToolsDirectory;
+
     private StreamWriter logWriter;
 
     public bool IsToolReady { get; private set; }
@@ -42,7 +44,7 @@ public class CompatibilityTools
 
     private Dictionary<string, string> extraEnvironmentVars;
 
-    public CompatibilityTools(WineSettings wineSettings, DxvkSettings dxvkSettings, bool? gamemodeOn, DirectoryInfo toolsFolder, DirectoryInfo gamePath, DirectoryInfo gameConfigPath, bool isFlatpak, Dictionary<string, string> extraEnvVars = null)
+    public CompatibilityTools(WineSettings wineSettings, DxvkSettings dxvkSettings, bool? gamemodeOn, DirectoryInfo toolsFolder, DirectoryInfo steamFolder, DirectoryInfo gamePath, DirectoryInfo gameConfigPath, bool isFlatpak, Dictionary<string, string> extraEnvVars = null)
     {
         this.Settings = wineSettings;
         this.DxvkSettings = dxvkSettings;
@@ -56,6 +58,7 @@ public class CompatibilityTools
 
         this.wineDirectory = new DirectoryInfo(Path.Combine(toolsFolder.FullName, "wine"));
         this.dxvkDirectory = new DirectoryInfo(Path.Combine(toolsFolder.FullName, "dxvk"));
+        this.compatToolsDirectory = new DirectoryInfo(Path.Combine(steamFolder.FullName, "compatibilitytools.d"));
 
         this.logWriter = new StreamWriter(wineSettings.LogFile.FullName);
 
@@ -64,6 +67,9 @@ public class CompatibilityTools
 
         if (!this.dxvkDirectory.Exists)
             this.dxvkDirectory.Create();
+
+        if (!this.compatToolsDirectory.Exists && wineSettings.IsProton)
+            this.compatToolsDirectory.Create();
 
         if (!wineSettings.Prefix.Exists)
         {
@@ -75,21 +81,21 @@ public class CompatibilityTools
 
     public async Task EnsureTool(DirectoryInfo tempPath)
     {
-        if (Settings.IsProton)
-        {
-            if (!File.Exists(Settings.WinePath))
-                throw new FileNotFoundException("Selected proton version not found");
-            IsToolReady = true;
-            EnsurePrefix();
-            return;
-        }
+        // if (Settings.IsProton)
+        // {
+        //     if (!File.Exists(Settings.WinePath))
+        //         throw new FileNotFoundException("Selected proton version not found");
+        //     IsToolReady = true;
+        //     EnsurePrefix();
+        //     return;
+        // }
 
         if (!File.Exists(Settings.WinePath))
         {
             if (!Settings.IsManaged)
-                throw new FileNotFoundException($"There was not wine or wine64 at the given path: {Settings.WinePath}");
+                throw new FileNotFoundException($"{(Settings.IsProton ? "Proton version" : "Wine version")} not found at the given path: {Settings.WinePath}");
             Log.Information($"Compatibility tool does not exist, downloading {Settings.DownloadUrl}");
-            await DownloadTool(wineDirectory, Settings.DownloadUrl).ConfigureAwait(false);
+            await DownloadTool(Settings.IsProton ? compatToolsDirectory : wineDirectory, Settings.DownloadUrl).ConfigureAwait(false);
         }
         EnsurePrefix();
         
@@ -174,6 +180,19 @@ public class CompatibilityTools
         {
             psi.Environment.Add("STEAM_COMPAT_DATA_PATH", Settings.Prefix.FullName);
             psi.Environment.Add("STEAM_COMPAT_INSTALL_PATH", "");
+            if (!Settings.FsyncOn)
+            {
+                psi.Environment.Add("PROTON_NO_FSYNC", "1");
+                if (!Settings.EsyncOn)
+                    psi.Environment.Add("PROTON_NO_ESYNC", "1");
+            }
+            if (!DxvkSettings.Enabled)
+                psi.Environment.Add("PROTON_USE_WINED3D", "1");
+        }
+        else
+        {
+            psi.Environment.Add("WINEESYNC", Settings.EsyncOn ? "1" : "0");
+            psi.Environment.Add("WINEFSYNC", Settings.FsyncOn ? "1" : "0");
         }
         psi.Environment.Add("WINEDLLOVERRIDES", $"msquic=,mscoree=n,b;d3d9,d3d11,d3d10core,dxgi={(DxvkSettings.Enabled ? "n,b" : "b")}");
         psi.Arguments = runinprefix ? Settings.RunInPrefix + command : Settings.Run + command;
@@ -189,7 +208,7 @@ public class CompatibilityTools
         var psi = new ProcessStartInfo(Settings.Runner);
         psi.Arguments = (Settings.IsProton && !Settings.IsUmu) ? Settings.RunInPrefix + command : command;
 
-        Log.Verbose("Running in prefix: {FileName} {Arguments}", psi.FileName, command);
+        Log.Verbose("Running in prefix: {FileName} {Arguments}", psi.FileName, psi.Arguments);
         return RunInPrefix(psi, workingDirectory, environment, redirectOutput, writeLog, wineD3D);
     }
 
@@ -254,6 +273,9 @@ public class CompatibilityTools
         wineEnvironmentVariables.Add("WINEPREFIX", Settings.Prefix.FullName);
         if (Settings.IsUmu)
         {
+            // Need to use runinprefix, or it will (depending on proton version) launch Dalamud in a separate wine cmd prompt. This prevents the process from being found.
+            if (!environment.ContainsKey("PROTON_VERB"))
+                environment.Add("PROTON_VERB", "runinprefix");
             wineEnvironmentVariables.Add("GAMEID", "XIVLauncher.Core");
             wineEnvironmentVariables.Add("PROTONPATH", new FileInfo(Settings.WinePath).DirectoryName);
             var importantPaths = new System.Text.StringBuilder(GamePath.FullName + ":" + GameConfigPath.FullName);
@@ -322,7 +344,6 @@ public class CompatibilityTools
 
         foreach (var dxvkVar in DxvkSettings.Environment)
             wineEnvironmentVariables.Add(dxvkVar.Key, dxvkVar.Value);
-
 
         MergeDictionaries(psi.Environment, wineEnvironmentVariables);
         MergeDictionaries(psi.Environment, extraEnvironmentVars);       // Allow extraEnvironmentVars to override what we set here.
@@ -393,8 +414,6 @@ public class CompatibilityTools
     public Int32 GetUnixProcessId(Int32 winePid)
     {
         var environment = new Dictionary<string, string>();
-        if (Settings.IsUmu)
-            environment.Add("PROTON_VERB", "runinprefix");
         var wineDbg = RunInPrefix("winedbg --command \"info procmap\"", redirectOutput: true, environment: environment);
         var output = wineDbg.StandardOutput.ReadToEnd();
         if (output.Contains("syntax error\n") || output.Contains("Exception c0000005")) // Proton8 wine changed the error message
@@ -411,8 +430,6 @@ public class CompatibilityTools
     private string GetProcessName(Int32 winePid)
     {
         var environment = new Dictionary<string, string>();
-        if (Settings.IsUmu)
-            environment.Add("PROTON_VERB", "runinprefix");
         var wineDbg = RunInPrefix("winedbg --command \"info proc\"", redirectOutput: true, environment: environment);
         var output = wineDbg.StandardOutput.ReadToEnd();
         var matchingLines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries).Skip(1).Where(

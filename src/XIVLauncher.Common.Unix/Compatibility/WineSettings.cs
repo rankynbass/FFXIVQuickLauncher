@@ -39,7 +39,7 @@ public class WineSettings
     public WineSettings(bool isProton, string wineFolder, string downloadUrl, string umuPath, string debugVars, FileInfo logFile, DirectoryInfo prefix, bool? esyncOn, bool? fsyncOn)
     {
         IsProton = isProton;
-        BinPath = isProton ? wineFolder : Path.Combine(wineFolder, "bin");
+        BinPath = isProton ? wineFolder : WineCheck(wineFolder);
         WinePath = isProton ? Path.Combine(BinPath, "proton") : File.Exists(Path.Combine(BinPath, "wine64")) ? Path.Combine(BinPath, "wine64") : Path.Combine(BinPath, "wine");
         WineServerPath = isProton ? Path.Combine(BinPath, "files", "bin", "wineserver") : Path.Combine(BinPath, "wineserver");
         DownloadUrl = downloadUrl;
@@ -50,5 +50,13 @@ public class WineSettings
         this.DebugVars = debugVars;
         this.LogFile = logFile;
         this.Prefix = prefix;
+    }
+
+    private string WineCheck(string dir)
+    {
+        var directory = new DirectoryInfo(dir);
+        if (directory.Name == "bin")
+            return directory.FullName;
+        return Path.Combine(directory.FullName, "bin");            
     }
 }
