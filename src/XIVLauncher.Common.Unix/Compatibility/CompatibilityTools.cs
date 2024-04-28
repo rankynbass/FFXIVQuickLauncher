@@ -81,15 +81,6 @@ public class CompatibilityTools
 
     public async Task EnsureTool(DirectoryInfo tempPath)
     {
-        // if (Settings.IsProton)
-        // {
-        //     if (!File.Exists(Settings.WinePath))
-        //         throw new FileNotFoundException("Selected proton version not found");
-        //     IsToolReady = true;
-        //     EnsurePrefix();
-        //     return;
-        // }
-
         if (!File.Exists(Settings.WinePath))
         {
             if (!Settings.IsManaged)
@@ -206,7 +197,7 @@ public class CompatibilityTools
     public Process RunInPrefix(string command, string workingDirectory = "", IDictionary<string, string> environment = null, bool redirectOutput = false, bool writeLog = false, bool wineD3D = false)
     {
         var psi = new ProcessStartInfo(Settings.Runner);
-        psi.Arguments = (Settings.IsProton && !Settings.IsUmu) ? Settings.RunInPrefix + command : command;
+        psi.Arguments = Settings.RunInContainer + Settings.RunInPrefix + command;
 
         Log.Verbose("Running in prefix: {FileName} {Arguments}", psi.FileName, psi.Arguments);
         return RunInPrefix(psi, workingDirectory, environment, redirectOutput, writeLog, wineD3D);
@@ -215,7 +206,10 @@ public class CompatibilityTools
     public Process RunInPrefix(string[] args, string workingDirectory = "", IDictionary<string, string> environment = null, bool redirectOutput = false, bool writeLog = false, bool wineD3D = false)
     {
         var psi = new ProcessStartInfo(Settings.Runner);
-        if (Settings.IsProton && !Settings.IsUmu)
+        if (Settings.IsContainer)
+            foreach (var arg in Settings.RunInContainerArray)
+                psi.ArgumentList.Add(arg);
+        if (Settings.IsProton)
             psi.ArgumentList.Add(Settings.RunInPrefix.Trim());
         foreach (var arg in args)
             psi.ArgumentList.Add(arg);
@@ -270,14 +264,8 @@ public class CompatibilityTools
         wineD3D = !DxvkSettings.Enabled || wineD3D;
 
         var wineEnvironmentVariables = new Dictionary<string, string>();
-        wineEnvironmentVariables.Add("WINEPREFIX", Settings.Prefix.FullName);
-        if (Settings.IsUmu)
+        if (Settings.IsContainer)
         {
-            // Need to use runinprefix, or it will (depending on proton version) launch Dalamud in a separate wine cmd prompt. This prevents the process from being found.
-            if (!environment.ContainsKey("PROTON_VERB"))
-                environment.Add("PROTON_VERB", "runinprefix");
-            wineEnvironmentVariables.Add("GAMEID", "XIVLauncher.Core");
-            wineEnvironmentVariables.Add("PROTONPATH", new FileInfo(Settings.WinePath).DirectoryName);
             var importantPaths = new System.Text.StringBuilder(GamePath.FullName + ":" + GameConfigPath.FullName);
             var steamCompatMounts = System.Environment.GetEnvironmentVariable("STEAM_COMPAT_MOUNTS");
             var pressureVesselFilesystems = System.Environment.GetEnvironmentVariable("PRESSURE_VESSEL_FILESYSTEMS_RW");
@@ -306,10 +294,26 @@ public class CompatibilityTools
             
             wineEnvironmentVariables.Add("PRESSURE_VESSEL_FILESYSTEMS_RW", importantPaths.ToString());
         }
-        else if (Settings.IsProton)
+        
+        if (Settings.IsProton)
         {
             wineEnvironmentVariables.Add("STEAM_COMPAT_DATA_PATH", Settings.Prefix.FullName);
             wineEnvironmentVariables.Add("STEAM_COMPAT_INSTALL_PATH", "");
+            if (!Settings.FsyncOn)
+            {
+                wineEnvironmentVariables.Add("PROTON_NO_FSYNC", "1");
+                if (!Settings.EsyncOn)
+                    wineEnvironmentVariables.Add("PROTON_NO_ESYNC", "1");
+            }
+            if (wineD3D)
+                wineEnvironmentVariables.Add("PROTON_USE_WINED3D", "1");
+        }
+        
+        if (!Settings.IsProton)
+        {
+            wineEnvironmentVariables.Add("WINEESYNC", Settings.EsyncOn ? "1" : "0");
+            wineEnvironmentVariables.Add("WINEFSYNC", Settings.FsyncOn ? "1" : "0");
+            wineEnvironmentVariables.Add("WINEPREFIX", Settings.Prefix.FullName);
         }
 
         wineEnvironmentVariables.Add("WINEDLLOVERRIDES", $"msquic=,mscoree=n,b;d3d9,d3d11,d3d10core,dxgi={(wineD3D ? "b" : "n,b")}");
@@ -323,24 +327,6 @@ public class CompatibilityTools
 
         if (this.gamemodeOn)
             wineEnvironmentVariables.Add("LD_PRELOAD", MergeLDPreload("libgamemodeauto.so.0" , Environment.GetEnvironmentVariable("LD_PRELOAD")));
-
-        if (Settings.IsProton)
-        {
-            if (!Settings.FsyncOn)
-            {
-                wineEnvironmentVariables.Add("PROTON_NO_FSYNC", "1");
-                if (!Settings.EsyncOn)
-                    wineEnvironmentVariables.Add("PROTON_NO_ESYNC", "1");
-            }
-            if (wineD3D)
-                wineEnvironmentVariables.Add("PROTON_USE_WINED3D", "1");
-
-        }
-        else
-        {
-            wineEnvironmentVariables.Add("WINEESYNC", Settings.EsyncOn ? "1" : "0");
-            wineEnvironmentVariables.Add("WINEFSYNC", Settings.FsyncOn ? "1" : "0");
-        }
 
         foreach (var dxvkVar in DxvkSettings.Environment)
             wineEnvironmentVariables.Add(dxvkVar.Key, dxvkVar.Value);

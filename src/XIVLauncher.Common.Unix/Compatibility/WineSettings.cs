@@ -8,7 +8,7 @@ public class WineSettings
 
     public bool IsProton { get; private set; }
 
-    public bool IsUmu => File.Exists(UmuPath);
+    public bool IsContainer => File.Exists(ContainerPath);
 
     public string WineServerPath { get; private set; }
 
@@ -18,7 +18,7 @@ public class WineSettings
 
     public string DownloadUrl;
 
-    private string UmuPath;
+    private string ContainerPath;
 
     public bool EsyncOn { get; private set; }
 
@@ -30,20 +30,24 @@ public class WineSettings
 
     public DirectoryInfo Prefix { get; private set; }
 
-    public string Runner => string.IsNullOrEmpty(UmuPath) ? WinePath : UmuPath;
+    public string Runner => string.IsNullOrEmpty(ContainerPath) ? WinePath : ContainerPath;
 
     public string Run => IsProton ? "run " : "";
 
     public string RunInPrefix => IsProton ? "runinprefix " : "";
 
-    public WineSettings(bool isProton, string wineFolder, string downloadUrl, string umuPath, string debugVars, FileInfo logFile, DirectoryInfo prefix, bool? esyncOn, bool? fsyncOn)
+    public string RunInContainer => IsContainer ? $"--verb=waitforexitandrun -- \"{WinePath}\" " : "";
+
+    public string[] RunInContainerArray => IsContainer ? new string[] {"--verb=waitforexitandrun", "--", WinePath} : new string[] { };
+
+    public WineSettings(bool isProton, string wineFolder, string downloadUrl, string containerPath, string debugVars, FileInfo logFile, DirectoryInfo prefix, bool? esyncOn, bool? fsyncOn)
     {
         IsProton = isProton;
         BinPath = isProton ? wineFolder : WineCheck(wineFolder);
         WinePath = isProton ? Path.Combine(BinPath, "proton") : File.Exists(Path.Combine(BinPath, "wine64")) ? Path.Combine(BinPath, "wine64") : Path.Combine(BinPath, "wine");
         WineServerPath = isProton ? Path.Combine(BinPath, "files", "bin", "wineserver") : Path.Combine(BinPath, "wineserver");
         DownloadUrl = downloadUrl;
-        UmuPath = umuPath;
+        ContainerPath = string.IsNullOrEmpty(containerPath) ? "" : Path.Combine(containerPath, "_v2-entry-point");
 
         this.EsyncOn = esyncOn ?? false;
         this.FsyncOn = fsyncOn ?? false;
