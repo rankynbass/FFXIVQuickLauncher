@@ -22,6 +22,8 @@ public class CompatibilityTools
 
     private DirectoryInfo compatToolsDirectory;
 
+    private DirectoryInfo commonDirectory;
+
     private StreamWriter logWriter;
 
     public bool IsToolReady { get; private set; }
@@ -59,6 +61,7 @@ public class CompatibilityTools
         this.wineDirectory = new DirectoryInfo(Path.Combine(toolsFolder.FullName, "wine"));
         this.dxvkDirectory = new DirectoryInfo(Path.Combine(toolsFolder.FullName, "dxvk"));
         this.compatToolsDirectory = new DirectoryInfo(Path.Combine(steamFolder.FullName, "compatibilitytools.d"));
+        this.commonDirectory = new DirectoryInfo(Path.Combine(steamFolder.FullName, "steamapps", "common"));
 
         this.logWriter = new StreamWriter(wineSettings.LogFile.FullName);
 
@@ -71,6 +74,9 @@ public class CompatibilityTools
         if (!this.compatToolsDirectory.Exists && wineSettings.IsProton)
             this.compatToolsDirectory.Create();
 
+        if (!this.commonDirectory.Exists && wineSettings.IsContainer)
+            this.commonDirectory.Create();
+
         if (!wineSettings.Prefix.Exists)
         {
             wineSettings.Prefix.Create();
@@ -81,16 +87,27 @@ public class CompatibilityTools
 
     public async Task EnsureTool(DirectoryInfo tempPath)
     {
+        // Download the container if it's missing
+        if (Settings.IsContainer && !File.Exists(Settings.Runner))
+        {
+            if (string.IsNullOrEmpty(Settings.ContainerUrl))
+                throw new FileNotFoundException($"Steam runtime selected, but is not present, and no download url provided.");
+            Log.Information($"Steam Linux Runtime does not exist, downloading {Settings.ContainerUrl}");
+            await DownloadTool(commonDirectory, Settings.ContainerUrl).ConfigureAwait(false);
+        }
+
+        // Download Wine / Proton if it's missing
         if (!File.Exists(Settings.WinePath))
         {
-            if (!Settings.IsManaged)
-                throw new FileNotFoundException($"{(Settings.IsProton ? "Proton version" : "Wine version")} not found at the given path: {Settings.WinePath}");
+            if (string.IsNullOrEmpty(Settings.DownloadUrl))
+                throw new FileNotFoundException($"{(Settings.IsProton ? "Proton version" : "Wine version")} not found at the given path: {Settings.WinePath}, and no download url provided.");
             Log.Information($"Compatibility tool does not exist, downloading {Settings.DownloadUrl}");
             await DownloadTool(Settings.IsProton ? compatToolsDirectory : wineDirectory, Settings.DownloadUrl).ConfigureAwait(false);
         }
         EnsurePrefix();
         
-        if (DxvkSettings.Enabled)
+        // Download and install DXVK if enabled and not using proton
+        if (DxvkSettings.Enabled && !Settings.IsProton)
             await InstallDxvk().ConfigureAwait(false);
 
         IsToolReady = true;
@@ -170,7 +187,7 @@ public class CompatibilityTools
         if (Settings.IsProton)
         {
             psi.Environment.Add("STEAM_COMPAT_DATA_PATH", Settings.Prefix.FullName);
-            psi.Environment.Add("STEAM_COMPAT_INSTALL_PATH", "");
+            psi.Environment.Add("STEAM_COMPAT_CLIENT_INSTALL_PATH", compatToolsDirectory.Parent.FullName);
             if (!Settings.FsyncOn)
             {
                 psi.Environment.Add("PROTON_NO_FSYNC", "1");
@@ -292,13 +309,13 @@ public class CompatibilityTools
                 importantPaths.Append($":{runtimeDir}/discord-ipc-{i}");
             importantPaths.Append($"{runtimeDir}/app/com.discordapp.Discord:{runtimeDir}/snap.discord-canary");
             
-            wineEnvironmentVariables.Add("PRESSURE_VESSEL_FILESYSTEMS_RW", importantPaths.ToString());
+            wineEnvironmentVariables.Add("STEAM_COMPAT_MOUNTS", importantPaths.ToString());
         }
         
         if (Settings.IsProton)
         {
             wineEnvironmentVariables.Add("STEAM_COMPAT_DATA_PATH", Settings.Prefix.FullName);
-            wineEnvironmentVariables.Add("STEAM_COMPAT_INSTALL_PATH", "");
+            wineEnvironmentVariables.Add("STEAM_COMPAT_CLIENT_INSTALL_PATH", compatToolsDirectory.Parent.FullName);
             if (!Settings.FsyncOn)
             {
                 wineEnvironmentVariables.Add("PROTON_NO_FSYNC", "1");

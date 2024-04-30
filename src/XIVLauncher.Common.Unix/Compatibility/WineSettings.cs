@@ -8,7 +8,7 @@ public class WineSettings
 
     public bool IsProton { get; private set; }
 
-    public bool IsContainer => File.Exists(ContainerPath);
+    public bool IsContainer => !string.IsNullOrEmpty(ContainerPath);
 
     public string WineServerPath { get; private set; }
 
@@ -19,6 +19,8 @@ public class WineSettings
     public string DownloadUrl;
 
     private string ContainerPath;
+
+    public string ContainerUrl;
 
     public bool EsyncOn { get; private set; }
 
@@ -40,7 +42,7 @@ public class WineSettings
 
     public string[] RunInContainerArray => IsContainer ? new string[] {"--verb=waitforexitandrun", "--", WinePath} : new string[] { };
 
-    public WineSettings(bool isProton, string wineFolder, string downloadUrl, string containerPath, string debugVars, FileInfo logFile, DirectoryInfo prefix, bool? esyncOn, bool? fsyncOn)
+    public WineSettings(bool isProton, string wineFolder, string downloadUrl, string containerPath, string containerUrl, string debugVars, FileInfo logFile, DirectoryInfo prefix, bool? esyncOn, bool? fsyncOn)
     {
         IsProton = isProton;
         BinPath = isProton ? wineFolder : WineCheck(wineFolder);
@@ -48,6 +50,7 @@ public class WineSettings
         WineServerPath = isProton ? Path.Combine(BinPath, "files", "bin", "wineserver") : Path.Combine(BinPath, "wineserver");
         DownloadUrl = downloadUrl;
         ContainerPath = string.IsNullOrEmpty(containerPath) ? "" : Path.Combine(containerPath, "_v2-entry-point");
+        ContainerUrl = containerUrl;
 
         this.EsyncOn = esyncOn ?? false;
         this.FsyncOn = fsyncOn ?? false;
