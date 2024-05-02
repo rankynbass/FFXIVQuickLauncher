@@ -74,7 +74,7 @@ public class CompatibilityTools
         if (!this.compatToolsDirectory.Exists && wineSettings.IsProton)
             this.compatToolsDirectory.Create();
 
-        if (!this.commonDirectory.Exists && wineSettings.IsContainer)
+        if (!this.commonDirectory.Exists && wineSettings.IsRuntime)
             this.commonDirectory.Create();
 
         if (!wineSettings.Prefix.Exists)
@@ -82,32 +82,55 @@ public class CompatibilityTools
             wineSettings.Prefix.Create();
             if (wineSettings.IsProton)
                 File.CreateSymbolicLink(Path.Combine(wineSettings.Prefix.FullName, "pfx"), wineSettings.Prefix.FullName);
+
+        }
+        else
+        {
+            if (File.Exists(Path.Combine(wineSettings.Prefix.FullName, "pfx")))
+                File.Delete(Path.Combine(wineSettings.Prefix.FullName, "pfx"));
+            if (wineSettings.IsProton && !Directory.Exists(Path.Combine(wineSettings.Prefix.FullName, "pfx")))
+                File.CreateSymbolicLink(Path.Combine(wineSettings.Prefix.FullName, "pfx"), wineSettings.Prefix.FullName);
         }
     }
 
     public async Task EnsureTool(DirectoryInfo tempPath)
     {
         // Download the container if it's missing
-        if (Settings.IsContainer && !File.Exists(Settings.Runner))
+        if (Settings.IsRuntime && !File.Exists(Settings.Runner))
         {
-            if (string.IsNullOrEmpty(Settings.ContainerUrl))
+            if (string.IsNullOrEmpty(Settings.RuntimeUrl))
                 throw new FileNotFoundException($"Steam runtime selected, but is not present, and no download url provided.");
-            Log.Information($"Steam Linux Runtime does not exist, downloading {Settings.ContainerUrl}");
-            await DownloadTool(commonDirectory, Settings.ContainerUrl).ConfigureAwait(false);
+            Log.Information($"Steam Linux Runtime does not exist, downloading {Settings.RuntimeUrl}");
+            await DownloadTool(commonDirectory, Settings.RuntimeUrl).ConfigureAwait(false);
         }
 
-        // Download Wine / Proton if it's missing
+        // Download Proton if it's missing, ensure the proton prefix, and return.
+        if (Settings.IsProton)
+        {
+            if (!File.Exists(Settings.WinePath))
+            {
+                if (string.IsNullOrEmpty(Settings.DownloadUrl))
+                    throw new FileNotFoundException($"Proton not found at the given path; {Settings.WinePath}, and no download url provided.");
+                Log.Information($"Compatibility tool (Proton) does not exist. Downloading {Settings.DownloadUrl} to {compatToolsDirectory.FullName}");
+                await DownloadTool(compatToolsDirectory, Settings.DownloadUrl).ConfigureAwait(false);
+            }
+            EnsurePrefix();
+            IsToolReady = true;
+            return;
+        }
+
+        // Download Wine if it's missing
         if (!File.Exists(Settings.WinePath))
         {
             if (string.IsNullOrEmpty(Settings.DownloadUrl))
-                throw new FileNotFoundException($"{(Settings.IsProton ? "Proton version" : "Wine version")} not found at the given path: {Settings.WinePath}, and no download url provided.");
-            Log.Information($"Compatibility tool does not exist, downloading {Settings.DownloadUrl}");
-            await DownloadTool(Settings.IsProton ? compatToolsDirectory : wineDirectory, Settings.DownloadUrl).ConfigureAwait(false);
+                throw new FileNotFoundException($"Wine not found at the given path: {Settings.WinePath}, and no download url provided.");
+            Log.Information($"Compatibility tool (Wine) does not exist, downloading {Settings.DownloadUrl} to {wineDirectory.FullName}");
+            await DownloadTool(wineDirectory, Settings.DownloadUrl).ConfigureAwait(false);
         }
         EnsurePrefix();
         
-        // Download and install DXVK if enabled and not using proton
-        if (DxvkSettings.Enabled && !Settings.IsProton)
+        // Download and install DXVK if enabled
+        if (DxvkSettings.Enabled)
             await InstallDxvk().ConfigureAwait(false);
 
         IsToolReady = true;
@@ -172,49 +195,63 @@ public class CompatibilityTools
 
     public void EnsurePrefix()
     {
-        RunWithoutContainer("cmd /c dir %userprofile%/Documents > nul", false).WaitForExit();
+        bool runinprefix = true;
+        // For proton, if the prefix hasn't been initialized, we need to use "proton run" instead of "proton runinprefix"
+        // That will generate these files.
+        if (!File.Exists(Path.Combine(Settings.Prefix.FullName, "config_info")) &&
+            !File.Exists(Path.Combine(Settings.Prefix.FullName, "pfx.lock")) &&
+            !File.Exists(Path.Combine(Settings.Prefix.FullName, "tracked_files")) &&
+            !File.Exists(Path.Combine(Settings.Prefix.FullName, "version")))
+        {
+            runinprefix = false;
+        }
+        RunWithoutRuntime("cmd /c dir %userprofile%/Documents > nul", runinprefix, false).WaitForExit();
     }
 
-    // This function exists to speed up launch times when using umu-run. umu-run isn't needed
-    // to do a few basic things like checking paths and initializing the prefix; no need to load the container.
-    public Process RunWithoutContainer(string command, bool runinprefix = true)
+    // This function exists to speed up launch times when using a Steam runtime. The runtime isn't needed
+    // to do a few basic things like checking paths and initializing the prefix; it just slows things down considerably.
+    // This can save upwards of 10 seconds, which otherwise might make the user think the launcher has hung or crashed.
+    public Process RunWithoutRuntime(string command, bool runinprefix = true, bool redirect = true)
     {
+        if (!Settings.IsProton)
+            return RunInPrefix(command, redirectOutput: redirect, writeLog: redirect);
         var psi = new ProcessStartInfo(Settings.WinePath);
         psi.RedirectStandardOutput = true;
         psi.RedirectStandardError = true;
         psi.UseShellExecute = false;
-        psi.Environment.Add("WINEPREFIX", Settings.Prefix.FullName);
-        if (Settings.IsProton)
+        // Need to set these or proton will refuse to run.
+        psi.Environment.Add("STEAM_COMPAT_DATA_PATH", Settings.Prefix.FullName);
+        psi.Environment.Add("STEAM_COMPAT_CLIENT_INSTALL_PATH", compatToolsDirectory.Parent.FullName);
+        // Need to properly set esync/fsync or it can sometimes cause problems with the wineserver.
+        if (!Settings.FsyncOn)
         {
-            psi.Environment.Add("STEAM_COMPAT_DATA_PATH", Settings.Prefix.FullName);
-            psi.Environment.Add("STEAM_COMPAT_CLIENT_INSTALL_PATH", compatToolsDirectory.Parent.FullName);
-            if (!Settings.FsyncOn)
-            {
-                psi.Environment.Add("PROTON_NO_FSYNC", "1");
-                if (!Settings.EsyncOn)
-                    psi.Environment.Add("PROTON_NO_ESYNC", "1");
-            }
-            if (!DxvkSettings.Enabled)
-                psi.Environment.Add("PROTON_USE_WINED3D", "1");
+            psi.Environment.Add("PROTON_NO_FSYNC", "1");
+            if (!Settings.EsyncOn)
+                psi.Environment.Add("PROTON_NO_ESYNC", "1");
         }
-        else
-        {
-            psi.Environment.Add("WINEESYNC", Settings.EsyncOn ? "1" : "0");
-            psi.Environment.Add("WINEFSYNC", Settings.FsyncOn ? "1" : "0");
-        }
+        if (!DxvkSettings.Enabled)
+            psi.Environment.Add("PROTON_USE_WINED3D", "1");
+
         psi.Environment.Add("WINEDLLOVERRIDES", $"msquic=,mscoree=n,b;d3d9,d3d11,d3d10core,dxgi={(DxvkSettings.Enabled ? "n,b" : "b")}");
         psi.Arguments = runinprefix ? Settings.RunInPrefix + command : Settings.Run + command;
         var quickRun = new Process();
         quickRun.StartInfo = psi;
         quickRun.Start();
-        Log.Verbose("Running in prefix: {FileName} {Arguments}", psi.FileName, psi.Arguments);
+        Log.Verbose("Running without runtime: {FileName} {Arguments}", psi.FileName, psi.Arguments);
         return quickRun;
+    }
+
+    public void RunExternalProgram(string command, string workingDirectory = "", IDictionary<string, string> environment = null, bool redirectOutput = false, bool writeLog = false, bool wineD3D = false)
+    {
+        // Just need to make sure prefix is ensured before running RunInPrefix() from XL.Core. Otherwise it can create a broken prefix.
+        EnsurePrefix();
+        RunInPrefix(command, workingDirectory, environment, redirectOutput, writeLog, wineD3D);
     }
 
     public Process RunInPrefix(string command, string workingDirectory = "", IDictionary<string, string> environment = null, bool redirectOutput = false, bool writeLog = false, bool wineD3D = false)
     {
         var psi = new ProcessStartInfo(Settings.Runner);
-        psi.Arguments = Settings.RunInContainer + Settings.RunInPrefix + command;
+        psi.Arguments = Settings.RunInRuntime + Settings.RunInPrefix + command;
 
         Log.Verbose("Running in prefix: {FileName} {Arguments}", psi.FileName, psi.Arguments);
         return RunInPrefix(psi, workingDirectory, environment, redirectOutput, writeLog, wineD3D);
@@ -223,8 +260,8 @@ public class CompatibilityTools
     public Process RunInPrefix(string[] args, string workingDirectory = "", IDictionary<string, string> environment = null, bool redirectOutput = false, bool writeLog = false, bool wineD3D = false)
     {
         var psi = new ProcessStartInfo(Settings.Runner);
-        if (Settings.IsContainer)
-            foreach (var arg in Settings.RunInContainerArray)
+        if (Settings.IsRuntime)
+            foreach (var arg in Settings.RunInRuntimeArray)
                 psi.ArgumentList.Add(arg);
         if (Settings.IsProton)
             psi.ArgumentList.Add(Settings.RunInPrefix.Trim());
@@ -281,18 +318,15 @@ public class CompatibilityTools
         wineD3D = !DxvkSettings.Enabled || wineD3D;
 
         var wineEnvironmentVariables = new Dictionary<string, string>();
-        if (Settings.IsContainer)
+        if (Settings.IsRuntime)
         {
             var importantPaths = new System.Text.StringBuilder(GamePath.FullName + ":" + GameConfigPath.FullName);
             var steamCompatMounts = System.Environment.GetEnvironmentVariable("STEAM_COMPAT_MOUNTS");
-            var pressureVesselFilesystems = System.Environment.GetEnvironmentVariable("PRESSURE_VESSEL_FILESYSTEMS_RW");
-            var xlCompatMounts = System.Environment.GetEnvironmentVariable("XL_COMPAT_MOUNTS");
             if (!string.IsNullOrEmpty(steamCompatMounts))
-                importantPaths.Append(":" + steamCompatMounts);
-            if (!string.IsNullOrEmpty(pressureVesselFilesystems))
-                importantPaths.Append(":" + pressureVesselFilesystems);
-            if (!string.IsNullOrEmpty(xlCompatMounts))
-                importantPaths.Append(":" + xlCompatMounts);
+                importantPaths.Append(":" + steamCompatMounts.Trim(':'));
+            
+            // These paths are for winediscordipcbridge.exe. Note that exact files are being passed, not directories.
+            // You can't pass the whole /run/user/<userid> directory; it will get ignored.
             var runtimeDir = System.Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR");
             if (string.IsNullOrEmpty(runtimeDir))
             {
@@ -314,6 +348,7 @@ public class CompatibilityTools
         
         if (Settings.IsProton)
         {
+            // Need to set these or proton will refuse to run.
             wineEnvironmentVariables.Add("STEAM_COMPAT_DATA_PATH", Settings.Prefix.FullName);
             wineEnvironmentVariables.Add("STEAM_COMPAT_CLIENT_INSTALL_PATH", compatToolsDirectory.Parent.FullName);
             if (!Settings.FsyncOn)
@@ -471,7 +506,7 @@ public class CompatibilityTools
     public string UnixToWinePath(string unixPath)
     {
         var launchArguments = $"winepath --windows \"{unixPath}\"";
-        var winePath = RunWithoutContainer(launchArguments);
+        var winePath = RunWithoutRuntime(launchArguments);
         var output = winePath.StandardOutput.ReadToEnd();
         return output.Split('\n', StringSplitOptions.RemoveEmptyEntries).LastOrDefault();
     }
@@ -479,7 +514,7 @@ public class CompatibilityTools
     public void AddRegistryKey(string key, string value, string data)
     {
         var args = $"reg add {key} /v {value} /d {data} /f";
-        var wineProcess = RunWithoutContainer(args);
+        var wineProcess = RunWithoutRuntime(args);
         wineProcess.WaitForExit();
     }
 
