@@ -16,7 +16,7 @@ public class DxvkSettings
 
     public Dictionary<string, string> Environment { get; }
 
-    public DxvkSettings(string folder, string url, string storageFolder, bool async, int maxFrameRate, bool dxvkHudEnabled, string dxvkHudString, bool mangoHudEnabled = false, bool mangoHudCustomIsFile = false, string customMangoHud = "", bool enabled = true)
+    public DxvkSettings(string folder, string url, string storageFolder, bool async, bool gplCache, int maxFrameRate, bool dxvkHudEnabled, string dxvkHudString, bool mangoHudEnabled = false, bool mangoHudCustomIsFile = false, string customMangoHud = "", bool enabled = true)
     {
         FolderName = folder;
         DownloadUrl = url;
@@ -33,9 +33,13 @@ public class DxvkSettings
             Environment.Add("DXVK_FRAME_RATE", (maxFrameRate).ToString());
         
         if (async)
+        {
             Environment.Add("DXVK_ASYNC", "1");
+            Environment.Add("DXVK_GPLASYNCCACHE", gplCache ? "1" : "0");
+        }   
         else
             Environment.Add("DXVK_ASYNC", "0");
+
         
         var dxvkCachePath = new DirectoryInfo(Path.Combine(dxvkConfigPath.FullName, "cache"));
         if (!dxvkCachePath.Exists) dxvkCachePath.Create();
