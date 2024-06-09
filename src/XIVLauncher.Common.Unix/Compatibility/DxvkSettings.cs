@@ -34,6 +34,8 @@ public class DxvkSettings
         
         if (async)
             Environment.Add("DXVK_ASYNC", "1");
+        else
+            Environment.Add("DXVK_ASYNC", "0");
         
         var dxvkCachePath = new DirectoryInfo(Path.Combine(dxvkConfigPath.FullName, "cache"));
         if (!dxvkCachePath.Exists) dxvkCachePath.Create();
