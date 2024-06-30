@@ -136,6 +136,16 @@ public class CompatibilityTools
         IsToolReady = true;
     }
 
+    public async Task DownloadWine()
+    {
+        await DownloadTool(wineDirectory, Settings.DownloadUrl).ConfigureAwait(false);
+    }
+
+    public async Task DownloadDxvk()
+    {
+        await DownloadTool(dxvkDirectory, DxvkSettings.DownloadUrl).ConfigureAwait(false);
+    }
+
     private async Task InstallDxvk()
     {
         var dxvkPath = Path.Combine(dxvkDirectory.FullName, DxvkSettings.FolderName, "x64");
