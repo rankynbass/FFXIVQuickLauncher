@@ -141,6 +141,11 @@ public class CompatibilityTools
         await DownloadTool(wineDirectory, Settings.DownloadUrl).ConfigureAwait(false);
     }
 
+    public async Task DownloadProton()
+    {
+        await DownloadTool(compatToolsDirectory, Settings.DownloadUrl).ConfigureAwait(false);
+    }
+
     public async Task DownloadDxvk()
     {
         await DownloadTool(dxvkDirectory, DxvkSettings.DownloadUrl).ConfigureAwait(false);
