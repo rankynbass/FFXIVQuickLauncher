@@ -33,7 +33,9 @@ public class DxvkSettings
         
         if (async)
             Environment.Add("DXVK_ASYNC", "1");
-
+        else
+            Environment.Add("DXVK_ASYNC", "0");
+            
         if (dxvkHudEnabled)
             Environment.Add("DXVK_HUD", DxvkHudStringIsValid(dxvkHudString) ? dxvkHudString : "1");
 
