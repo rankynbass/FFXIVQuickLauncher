@@ -23,7 +23,8 @@ public class NvapiSettings
         Environment = new Dictionary<string, string>
         {
             { "DXVK_NVAPI_LOG_PATH", Path.Combine(storageFolder, "logs") },
-            { "DXVK_ENABLE_NVAPI", Enabled ? "1" : "0"},
+            { "DXVK_NVAPI_LOG_LEVEL", "info" },
+            { "DXVK_ENABLE_NVAPI", Enabled ? "1" : "0" },
         };
     }
 }
