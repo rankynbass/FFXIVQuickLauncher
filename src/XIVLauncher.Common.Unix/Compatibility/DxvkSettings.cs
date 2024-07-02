@@ -26,7 +26,6 @@ public class DxvkSettings
         Environment = new Dictionary<string, string>
         {
             { "DXVK_LOG_PATH", Path.Combine(storageFolder, "logs") },
-            { "DXVK_CONFIG_FILE", Path.Combine(dxvkConfigPath.FullName, "dxvk.conf") },
         };
         
         if (maxFrameRate != 0)

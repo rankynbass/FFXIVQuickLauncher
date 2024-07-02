@@ -20,6 +20,8 @@ public class CompatibilityTools
     
     private DirectoryInfo dxvkDirectory;
 
+    private DirectoryInfo nvapiDirectory;
+
     private StreamWriter logWriter;
 
     public bool IsToolReady { get; private set; }
@@ -27,6 +29,8 @@ public class CompatibilityTools
     public WineSettings Settings { get; private set; }
 
     public DxvkSettings DxvkSettings { get; private set; }
+
+    public NvapiSettings NvapiSettings { get; private set; }
 
     public bool IsToolDownloaded => File.Exists(Settings.WinePath) && Settings.Prefix.Exists;
 
@@ -36,10 +40,11 @@ public class CompatibilityTools
 
     private Dictionary<string, string> extraEnvironmentVars;
 
-    public CompatibilityTools(WineSettings wineSettings, DxvkSettings dxvkSettings, bool? gamemodeOn, DirectoryInfo toolsFolder, bool isFlatpak, Dictionary<string, string> extraEnvVars = null)
+    public CompatibilityTools(WineSettings wineSettings, DxvkSettings dxvkSettings, NvapiSettings nvapiSettings, bool? gamemodeOn, DirectoryInfo toolsFolder, bool isFlatpak, Dictionary<string, string> extraEnvVars = null)
     {
         this.Settings = wineSettings;
         this.DxvkSettings = dxvkSettings;
+        this.NvapiSettings = nvapiSettings;
         this.gamemodeOn = gamemodeOn ?? false;
 
         // These are currently unused. Here for future use. 
@@ -48,6 +53,7 @@ public class CompatibilityTools
 
         this.wineDirectory = new DirectoryInfo(Path.Combine(toolsFolder.FullName, "wine"));
         this.dxvkDirectory = new DirectoryInfo(Path.Combine(toolsFolder.FullName, "dxvk"));
+        this.nvapiDirectory = new DirectoryInfo(Path.Combine(toolsFolder.FullName, "nvapi"));
 
         this.logWriter = new StreamWriter(wineSettings.LogFile.FullName);
 
@@ -56,6 +62,9 @@ public class CompatibilityTools
 
         if (!this.dxvkDirectory.Exists)
             this.dxvkDirectory.Create();
+
+        if (!this.nvapiDirectory.Exists)
+            this.nvapiDirectory.Create();
 
         if (!wineSettings.Prefix.Exists)
             wineSettings.Prefix.Create();
@@ -71,35 +80,39 @@ public class CompatibilityTools
         EnsurePrefix();
         
         if (DxvkSettings.Enabled)
-            await InstallDxvk().ConfigureAwait(false);
+        {
+            await InstallToPrefix("DXVK", dxvkDirectory, DxvkSettings.FolderName, DxvkSettings.DownloadUrl).ConfigureAwait(false);
+            if (NvapiSettings.Enabled)
+                await InstallToPrefix("DXVK-NVAPI", nvapiDirectory, NvapiSettings.FolderName, NvapiSettings.DownloadUrl).ConfigureAwait(false);
+        }
 
         IsToolReady = true;
     }
 
-    private async Task InstallDxvk()
+    private async Task InstallToPrefix(string name, DirectoryInfo directory, string folderName, string downloadUrl)
     {
-        var dxvkPath = Path.Combine(dxvkDirectory.FullName, DxvkSettings.FolderName, "x64");
-        if (!Directory.Exists(dxvkPath))
+        var toolPath = Path.Combine(directory.FullName, folderName, "x64");
+        if (!Directory.Exists(toolPath))
         {
-            Log.Information($"DXVK does not exist, downloading {DxvkSettings.DownloadUrl}");
-            await DownloadTool(dxvkDirectory, DxvkSettings.DownloadUrl).ConfigureAwait(false);
+            Log.Information($"{name} does not exist, downloading {downloadUrl}");
+            await DownloadTool(directory, downloadUrl).ConfigureAwait(false);
         }
 
         var system32 = Path.Combine(Settings.Prefix.FullName, "drive_c", "windows", "system32");
-        var files = Directory.GetFiles(dxvkPath);
+        var files = Directory.GetFiles(toolPath);
 
         foreach (string fileName in files)
         {
             File.Copy(fileName, Path.Combine(system32, Path.GetFileName(fileName)), true);
         }
 
-        // 32-bit files for Directx9.
-        var dxvkPath32 = Path.Combine(dxvkDirectory.FullName, DxvkSettings.FolderName, "x32");
+        // 32-bit files for Directx9, just in case.
+        toolPath = Path.Combine(dxvkDirectory.FullName, DxvkSettings.FolderName, "x32");
         var syswow64 = Path.Combine(Settings.Prefix.FullName, "drive_c", "windows", "syswow64");
 
-        if (Directory.Exists(dxvkPath32))
+        if (Directory.Exists(toolPath))
         {
-            files = Directory.GetFiles(dxvkPath32);
+            files = Directory.GetFiles(toolPath);
 
             foreach (string fileName in files)
             {
@@ -213,8 +226,19 @@ public class CompatibilityTools
         if (this.gamemodeOn)
             wineEnvironmentVariables.Add("LD_PRELOAD", MergeLDPreload("libgamemodeauto.so.0" , Environment.GetEnvironmentVariable("LD_PRELOAD")));
 
-        foreach (var dxvkVar in DxvkSettings.Environment)
-            wineEnvironmentVariables.Add(dxvkVar.Key, dxvkVar.Value);
+        if (!wineD3D)
+        {
+            foreach (var dxvkVar in DxvkSettings.Environment)
+                wineEnvironmentVariables.Add(dxvkVar.Key, dxvkVar.Value);
+            if (NvapiSettings.Enabled)
+            {
+                foreach (var nvapiVar in NvapiSettings.Environment)
+                {
+                    wineEnvironmentVariables.Add(nvapiVar.Key, nvapiVar.Value);
+                    Log.Information($"{nvapiVar.Key}={nvapiVar.Value}");
+                }
+            }
+        }
         wineEnvironmentVariables.Add("WINEESYNC", Settings.EsyncOn);
         wineEnvironmentVariables.Add("WINEFSYNC", Settings.FsyncOn);
 
