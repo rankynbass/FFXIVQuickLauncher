@@ -20,6 +20,8 @@ public class CompatibilityTools
     
     private DirectoryInfo dxvkDirectory;
 
+    private DirectoryInfo vkd3dDirectory;
+
     private DirectoryInfo nvapiDirectory;
 
     private StreamWriter logWriter;
@@ -29,6 +31,8 @@ public class CompatibilityTools
     public WineSettings Settings { get; private set; }
 
     public DxvkSettings DxvkSettings { get; private set; }
+
+    public Vkd3dSettings Vkd3dSettings { get; private set; }
 
     public NvapiSettings NvapiSettings { get; private set; }
 
@@ -40,19 +44,21 @@ public class CompatibilityTools
 
     private Dictionary<string, string> extraEnvironmentVars;
 
-    public CompatibilityTools(WineSettings wineSettings, DxvkSettings dxvkSettings, NvapiSettings nvapiSettings, bool? gamemodeOn, DirectoryInfo toolsFolder, bool isFlatpak, Dictionary<string, string> extraEnvVars = null)
+    public CompatibilityTools(WineSettings wineSettings, DxvkSettings dxvkSettings, Vkd3dSettings vkd3dSettings, NvapiSettings nvapiSettings, bool? gamemodeOn, DirectoryInfo toolsFolder, bool isFlatpak, Dictionary<string, string> extraEnvVars = null)
     {
         this.Settings = wineSettings;
         this.DxvkSettings = dxvkSettings;
+        this.Vkd3dSettings = vkd3dSettings;
         this.NvapiSettings = nvapiSettings;
         this.gamemodeOn = gamemodeOn ?? false;
-
+ 
         // These are currently unused. Here for future use. 
         this.IsFlatpak = isFlatpak;
         this.extraEnvironmentVars = extraEnvVars ?? new Dictionary<string, string>();
 
         this.wineDirectory = new DirectoryInfo(Path.Combine(toolsFolder.FullName, "wine"));
         this.dxvkDirectory = new DirectoryInfo(Path.Combine(toolsFolder.FullName, "dxvk"));
+        this.vkd3dDirectory= new DirectoryInfo(Path.Combine(toolsFolder.FullName, "vkd3d"));
         this.nvapiDirectory = new DirectoryInfo(Path.Combine(toolsFolder.FullName, "nvapi"));
 
         this.logWriter = new StreamWriter(wineSettings.LogFile.FullName);
@@ -62,6 +68,9 @@ public class CompatibilityTools
 
         if (!this.dxvkDirectory.Exists)
             this.dxvkDirectory.Create();
+
+        if (!this.vkd3dDirectory.Exists)
+            this.vkd3dDirectory.Create();
 
         if (!this.nvapiDirectory.Exists)
             this.nvapiDirectory.Create();
@@ -82,6 +91,8 @@ public class CompatibilityTools
         if (DxvkSettings.Enabled)
         {
             await InstallToPrefix("DXVK", dxvkDirectory, DxvkSettings.FolderName, DxvkSettings.DownloadUrl).ConfigureAwait(false);
+            if (Vkd3dSettings.Enabled)
+                await InstallToPrefix("VKD3D", vkd3dDirectory, Vkd3dSettings.FolderName, Vkd3dSettings.DownloadUrl);
             if (NvapiSettings.Enabled)
                 await InstallToPrefix("DXVK-NVAPI", nvapiDirectory, NvapiSettings.FolderName, NvapiSettings.DownloadUrl).ConfigureAwait(false);
         }
@@ -108,6 +119,8 @@ public class CompatibilityTools
 
         // 32-bit files for Directx9, just in case.
         toolPath = Path.Combine(dxvkDirectory.FullName, DxvkSettings.FolderName, "x32");
+        if (!Directory.Exists(toolPath))
+            toolPath = Path.Combine(dxvkDirectory.FullName, DxvkSettings.FolderName, "x86");
         var syswow64 = Path.Combine(Settings.Prefix.FullName, "drive_c", "windows", "syswow64");
 
         if (Directory.Exists(toolPath))
@@ -215,7 +228,7 @@ public class CompatibilityTools
 
         var wineEnvironmentVariables = new Dictionary<string, string>();
         wineEnvironmentVariables.Add("WINEPREFIX", Settings.Prefix.FullName);
-        wineEnvironmentVariables.Add("WINEDLLOVERRIDES", $"msquic=,mscoree=n,b;d3d9,d3d11,d3d10core,dxgi={(wineD3D ? "b" : "n,b")}{(nvapi ? ";nvapi,nvapi64=n" : "")}");
+        wineEnvironmentVariables.Add("WINEDLLOVERRIDES", $"msquic=,mscoree=n,b;winmm.dll=n,b;d3d9,d3d11,d3d10core,d3d12,d3d12core,dxgi={(wineD3D ? "b" : "n,b")}");
         Console.WriteLine("WINEDLLOVERRIDES=" + wineEnvironmentVariables["WINEDLLOVERRIDES"]);
 
         if (!string.IsNullOrEmpty(Settings.DebugVars))
