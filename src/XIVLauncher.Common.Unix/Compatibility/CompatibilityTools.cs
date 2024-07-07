@@ -247,7 +247,10 @@ public class CompatibilityTools
         if (!DxvkSettings.Enabled)
             psi.Environment.Add("PROTON_USE_WINED3D", "1");
 
-        psi.Environment.Add("WINEDLLOVERRIDES", $"msquic=,mscoree=n,b;d3d9,d3d11,d3d10core,dxgi={(DxvkSettings.Enabled ? "n,b" : "b")}");
+        var wineOverrides = $"msquic=,mscoree=n,b;d3d11,dxgi={(DxvkSettings.Enabled ? "n,b" : "b")}";
+        if (!String.IsNullOrWhiteSpace(Settings.WineDLLOverrides))
+            wineOverrides += (";" + Settings.WineDLLOverrides);
+        psi.Environment.Add("WINEDLLOVERRIDES", wineOverrides);
         psi.Arguments = runinprefix ? Settings.RunInPrefix + command : Settings.Run + command;
         var quickRun = new Process();
         quickRun.StartInfo = psi;
@@ -383,7 +386,11 @@ public class CompatibilityTools
             wineEnvironmentVariables.Add("WINEPREFIX", Settings.Prefix.FullName);
         }
 
-        wineEnvironmentVariables.Add("WINEDLLOVERRIDES", $"msquic=,mscoree=n,b;d3d9,d3d11,d3d10core,dxgi={(wineD3D ? "b" : "n,b")}");
+        var wineOverrides = $"msquic=,mscoree=n,b;d3d11,dxgi={(wineD3D ? "b" : "n,b")}";
+        if (!String.IsNullOrWhiteSpace(Settings.WineDLLOverrides))
+            wineOverrides += (";" + Settings.WineDLLOverrides);
+        wineEnvironmentVariables.Add("WINEDLLOVERRIDES", wineOverrides);
+        Console.WriteLine($"Using WINEDLLOVERRIDES=\"{wineEnvironmentVariables["WINEDLLOVERRIDES"]}\"");
 
         if (!string.IsNullOrEmpty(Settings.DebugVars))
         {

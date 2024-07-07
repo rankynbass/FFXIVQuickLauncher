@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 
 namespace XIVLauncher.Common.Unix.Compatibility;
 
@@ -66,6 +67,8 @@ public class WineSettings
 
     public bool FsyncOn { get; private set; }
 
+    public string WineDLLOverrides { get; private set; }
+
     public string DebugVars { get; private set; }
 
     public FileInfo LogFile { get; private set; }
@@ -95,7 +98,7 @@ public class WineSettings
         If steam runtime, it'll be: /path/to/runtime --verb=waitforexitandrun -- /path/to/proton runinprefix command
     */
 
-    public WineSettings(bool isProton, string wineFolder, string downloadUrl, string runtimePath, string runtimeUrl, string debugVars, FileInfo logFile, DirectoryInfo prefix, bool? esyncOn, bool? fsyncOn)
+    public WineSettings(bool isProton, string wineFolder, string downloadUrl, string runtimePath, string runtimeUrl, string wineDLLOverrides, string debugVars, FileInfo logFile, DirectoryInfo prefix, bool? esyncOn, bool? fsyncOn)
     {
         IsProton = isProton;
         BinPath = isProton ? wineFolder : WineCheck(wineFolder);
@@ -110,6 +113,19 @@ public class WineSettings
         this.DebugVars = debugVars;
         this.LogFile = logFile;
         this.Prefix = prefix;
+        WineDLLOverrides = "";
+        var overrides = wineDLLOverrides.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        // Skip any overrides that contain dlls we already override.
+        foreach (var part in overrides)
+        {
+            if (part.Contains("dxgi") || part.Contains("d3d11") || part.Contains("mscoree") || part.Contains("msquic"))
+            {
+                Console.WriteLine($"Warning! Your Wine DLL Overrides \"{part}\" contains dxgi/d3d11/mscoree/msquic and will be ignored.");
+                continue;
+            }
+            WineDLLOverrides += (part + ";");
+        }
+        WineDLLOverrides = WineDLLOverrides.TrimEnd(';');
     }
 
     private string WineCheck(string dir)
