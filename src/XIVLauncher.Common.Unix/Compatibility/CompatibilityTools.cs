@@ -146,6 +146,11 @@ public class CompatibilityTools
         await DownloadTool(compatToolsDirectory, Settings.DownloadUrl).ConfigureAwait(false);
     }
 
+    public async Task DownloadRuntime()
+    {
+        await DownloadTool(commonDirectory, Settings.RuntimeUrl).ConfigureAwait(false);
+    }
+
     public async Task DownloadDxvk()
     {
         await DownloadTool(dxvkDirectory, DxvkSettings.DownloadUrl).ConfigureAwait(false);
