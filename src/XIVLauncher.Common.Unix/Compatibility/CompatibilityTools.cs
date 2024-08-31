@@ -117,7 +117,7 @@ public class CompatibilityTools
         var dxvkPath = Path.Combine(dxvkDirectory.FullName, DxvkSettings.NvapiFolderName, "x64");
         if (!Directory.Exists(dxvkPath))
         {
-            Log.Information($"DXVK Nvapi does not exist, downloading {DxvkSettings.DownloadNvapiUrl}");
+            Log.Information($"DXVK Nvapi does not exist, downloading {DxvkSettings.NvapiDownloadUrl}");
             await DownloadTool(dxvkDirectory, DxvkSettings.DownloadUrl).ConfigureAwait(false);
         }
 
