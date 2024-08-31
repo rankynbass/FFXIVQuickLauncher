@@ -71,7 +71,11 @@ public class CompatibilityTools
         EnsurePrefix();
         
         if (DxvkSettings.Enabled)
+        {
             await InstallDxvk().ConfigureAwait(false);
+            if (DxvkSettings.NvapiEnabled)
+                await InstallNvapi().ConfigureAwait(false);
+        }
 
         IsToolReady = true;
     }
@@ -93,7 +97,7 @@ public class CompatibilityTools
             File.Copy(fileName, Path.Combine(system32, Path.GetFileName(fileName)), true);
         }
 
-        // 32-bit files for Directx9.
+        // 32-bit files for Directx9. Only needed for external programs.
         var dxvkPath32 = Path.Combine(dxvkDirectory.FullName, DxvkSettings.FolderName, "x32");
         var syswow64 = Path.Combine(Settings.Prefix.FullName, "drive_c", "windows", "syswow64");
 
@@ -105,7 +109,50 @@ public class CompatibilityTools
             {
                 File.Copy(fileName, Path.Combine(syswow64, Path.GetFileName(fileName)), true);
             }
-        }   
+        }
+    }
+
+    private async Task InstallNvapi()
+    {
+        var dxvkPath = Path.Combine(dxvkDirectory.FullName, DxvkSettings.NvapiFolderName, "x64");
+        if (!Directory.Exists(dxvkPath))
+        {
+            Log.Information($"DXVK Nvapi does not exist, downloading {DxvkSettings.DownloadNvapiUrl}");
+            await DownloadTool(dxvkDirectory, DxvkSettings.DownloadUrl).ConfigureAwait(false);
+        }
+
+        var system32 = Path.Combine(Settings.Prefix.FullName, "drive_c", "windows", "system32");
+        var files = Directory.GetFiles(dxvkPath);
+
+        foreach (string fileName in files)
+        {
+            File.Copy(fileName, Path.Combine(system32, Path.GetFileName(fileName)), true);
+        }
+
+        // Copy nvngx files
+        if (!string.IsNullOrEmpty(DxvkSettings.NvngxFolder) && Directory.Exists(DxvkSettings.NvngxFolder))
+        {
+            files = Directory.GetFiles(DxvkSettings.NvngxFolder);
+
+            foreach (string fileName in files)
+            {
+                File.Copy(fileName, Path.Combine(system32, Path.GetFileName(fileName)), true);
+            }
+        }
+
+        // 32-bit files for Directx9. Only needed for external programs.
+        var dxvkPath32 = Path.Combine(dxvkDirectory.FullName, DxvkSettings.FolderName, "x32");
+        var syswow64 = Path.Combine(Settings.Prefix.FullName, "drive_c", "windows", "syswow64");
+
+        if (Directory.Exists(dxvkPath32))
+        {
+            files = Directory.GetFiles(dxvkPath32);
+
+            foreach (string fileName in files)
+            {
+                File.Copy(fileName, Path.Combine(syswow64, Path.GetFileName(fileName)), true);
+            }
+        }
     }
 
     private async Task DownloadTool(DirectoryInfo installDirectory, string downloadUrl)

@@ -14,12 +14,23 @@ public class DxvkSettings
 
     public string DownloadUrl { get; }
 
+    public string NvapiFolderName { get; }
+
+    public string NvapiDownloadUrl { get; }
+
+    public string NvngxFolder { get; }
+
+    public bool NvapiEnabled => !string.IsNullOrEmpty(NvapiFolderName) && Enabled;
+
     public Dictionary<string, string> Environment { get; }
 
-    public DxvkSettings(string folder, string url, string storageFolder, bool async, int maxFrameRate, bool dxvkHudEnabled, string dxvkHudString, bool mangoHudEnabled = false, bool mangoHudCustomIsFile = false, string customMangoHud = "", bool enabled = true)
+    public DxvkSettings(string folder, string url, string storageFolder, bool async, int maxFrameRate, bool dxvkHudEnabled, string dxvkHudString, bool mangoHudEnabled = false, bool mangoHudCustomIsFile = false, string customMangoHud = "", bool enabled = true, string nvapiFolder = "", string nvapiUrl = "", string nvngxFolder = "")
     {
         FolderName = folder;
         DownloadUrl = url;
+        NvapiFolderName = nvapiFolder;
+        NvapiDownloadUrl = nvapiUrl;
+        NvngxFolder = nvngxFolder;
         Enabled = enabled;
 
         var dxvkConfigPath = new DirectoryInfo(Path.Combine(storageFolder, "compatibilitytool", "dxvk"));
@@ -56,6 +67,12 @@ public class DxvkSettings
             {
                 Environment.Add("MANGOHUD_CONFIG", customMangoHud);
             }
+        }
+
+        if (!string.IsNullOrEmpty(NvapiFolderName))
+        {
+            Environment.Add("DXVK_ENABLE_NVAPI", "1");
+            Environment.Add("DXKV_CONFIG", "dxgi.nvapiHack = False; dxgi.hideNvidiaGpu = False");
         }
     }
 
