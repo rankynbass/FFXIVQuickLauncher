@@ -134,11 +134,40 @@ public class CompatibilityTools
             File.Copy(fileName, Path.Combine(system32, Path.GetFileName(fileName)), true);
         }
 
-        // Copy nvngx.dll and _nvngx.dll to the GamePath. For some reason it doesn't work if you put them in system32.
-        if (!string.IsNullOrEmpty(DxvkSettings.NvngxFolder) && Directory.Exists(DxvkSettings.NvngxFolder))
+        // Create symlinks to nvngx.dll and _nvngx.dll in the GamePath/game folder. For some reason it doesn't work if you put them in system32.
+        // If NvngxOverride is set, assume the files/symlinks are already there. For Nix compatibility, mostly.
+        if (!string.IsNullOrEmpty(DxvkSettings.NvngxFolder) && Directory.Exists(DxvkSettings.NvngxFolder) && !DxvkSettings.NvngxOverride)
         {
-            File.Copy(Path.Combine(DxvkSettings.NvngxFolder, "nvngx.dll"), Path.Combine(GamePath.FullName, "game", "nvngx.dll"), true);
-            File.Copy(Path.Combine(DxvkSettings.NvngxFolder, "_nvngx.dll"), Path.Combine(GamePath.FullName, "game", "_nvngx.dll"), true);
+            string[] targets = { "nvngx.dll", "_nvngx.dll"};
+            foreach (var target in targets)
+            {
+                var source = new FileInfo(Path.Combine(DxvkSettings.NvngxFolder, target));
+                var destination = new FileInfo(Path.Combine(GamePath.FullName, "game", target));
+                if (source.Exists)
+                {
+                    if (!destination.Exists) // No file, create link.
+                    {
+                        destination.CreateAsSymbolicLink(source.FullName);
+                        Log.Verbose($"Making symbolic link at {destination.FullName} to {source.FullName}");
+                    }
+                    else if (destination.ResolveLinkTarget(false) is null) // File exists, is not a symlink. Delete and create link.
+                    {
+                        destination.Delete();
+                        destination.CreateAsSymbolicLink(source.FullName);
+                        Log.Verbose($"Replacing file at {destination.FullName} with symbolic link to {source.FullName}");
+                    }
+                    else if (destination.ResolveLinkTarget(true).FullName != source.FullName) // Link exists, but does not point to source. Replace.
+                    {
+                        destination.Delete();
+                        destination.CreateAsSymbolicLink(source.FullName);
+                        Log.Verbose($"Symbolic link at {destination.FullName} incorrectly links to {destination.ResolveLinkTarget(true).FullName}. Replacing with link to {source.FullName}");
+                    }
+                    else
+                        Log.Verbose($"Symbolic link at {destination.FullName} to {source.FullName} is correct.");
+                }
+                else
+                    Log.Error($"Missing Nvidia dll! DLSS may not work. {target} not found in {DxvkSettings.NvngxFolder}");
+            }
         }
 
         // 32-bit files for Directx9. Only needed for external programs.

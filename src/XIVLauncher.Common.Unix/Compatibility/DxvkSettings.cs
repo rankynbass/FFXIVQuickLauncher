@@ -22,9 +22,11 @@ public class DxvkSettings
 
     public bool NvapiEnabled { get; }
 
+    public bool NvngxOverride { get; }
+
     public Dictionary<string, string> Environment { get; }
 
-    public DxvkSettings(string folder, string url, string storageFolder, bool async, int maxFrameRate, bool dxvkHudEnabled, string dxvkHudString, bool mangoHudEnabled = false, bool mangoHudCustomIsFile = false, string customMangoHud = "", bool enabled = true, string nvapiFolder = "", string nvapiUrl = "", string nvngxFolder = "")
+    public DxvkSettings(string folder, string url, string storageFolder, bool async, int maxFrameRate, bool dxvkHudEnabled, string dxvkHudString, bool mangoHudEnabled = false, bool mangoHudCustomIsFile = false, string customMangoHud = "", bool enabled = true, string nvapiFolder = "", string nvapiUrl = "", string nvngxFolder = "", bool nvngxOverride = false)
     {
         FolderName = folder;
         DownloadUrl = url;
@@ -32,6 +34,7 @@ public class DxvkSettings
         NvapiDownloadUrl = nvapiUrl;
         NvngxFolder = nvngxFolder;
         Enabled = enabled;
+        NvngxOverride = nvngxOverride;
 
         // Disable Nvapi if the NvapiFolderName is empty, if Dxvk is not enabled, or if the dxvk version is dxvk-1.x or dxvk-async-1.x
         NvapiEnabled = (!string.IsNullOrEmpty(NvapiFolderName) && DxvkAllowsNvapi(FolderName) && Enabled);
