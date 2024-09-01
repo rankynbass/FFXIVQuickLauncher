@@ -35,8 +35,6 @@ public class DxvkSettings
 
         // Disable Nvapi if the NvapiFolderName is empty, if Dxvk is not enabled, or if the dxvk version is dxvk-1.x or dxvk-async-1.x
         NvapiEnabled = (!string.IsNullOrEmpty(NvapiFolderName) && DxvkAllowsNvapi(FolderName) && Enabled);
-        System.Console.WriteLine($"NvapiEnabled = {NvapiEnabled}");
-
 
         var dxvkConfigPath = new DirectoryInfo(Path.Combine(storageFolder, "compatibilitytool", "dxvk"));
         Environment = new Dictionary<string, string>
