@@ -23,7 +23,7 @@ public class CompatibilityTools
     private DirectoryInfo compatToolsDirectory;
 
     private DirectoryInfo commonDirectory;
-
+    
     private StreamWriter logWriter;
 
     public bool IsToolReady { get; private set; }
@@ -62,6 +62,8 @@ public class CompatibilityTools
         this.dxvkDirectory = new DirectoryInfo(Path.Combine(toolsFolder.FullName, "dxvk"));
         this.compatToolsDirectory = new DirectoryInfo(Path.Combine(steamFolder.FullName, "compatibilitytools.d"));
         this.commonDirectory = new DirectoryInfo(Path.Combine(steamFolder.FullName, "steamapps", "common"));
+
+        this.GamePath = gamePath;
 
         this.logWriter = new StreamWriter(wineSettings.LogFile.FullName);
 
@@ -133,6 +135,9 @@ public class CompatibilityTools
         if (DxvkSettings.Enabled)
             await InstallDxvk().ConfigureAwait(false);
 
+        if (DxvkSettings.NvapiEnabled)
+            await InstallNvapi().ConfigureAwait(false);
+
         IsToolReady = true;
     }
 
@@ -185,7 +190,83 @@ public class CompatibilityTools
             {
                 File.Copy(fileName, Path.Combine(syswow64, Path.GetFileName(fileName)), true);
             }
-        }   
+        }
+    }
+
+    private async Task InstallNvapi()
+    {
+        var dxvkPath = Path.Combine(dxvkDirectory.FullName, DxvkSettings.NvapiFolderName, "x64");
+        if (!Directory.Exists(dxvkPath))
+        {
+            Log.Information($"DXVK Nvapi does not exist, downloading {DxvkSettings.NvapiDownloadUrl}");
+            var nvapiFolder = new DirectoryInfo(Path.Combine(dxvkDirectory.FullName, DxvkSettings.NvapiFolderName));
+            nvapiFolder.Create();
+            await DownloadTool(nvapiFolder, DxvkSettings.NvapiDownloadUrl).ConfigureAwait(false);
+        }
+
+        var system32 = Path.Combine(Settings.Prefix.FullName, "drive_c", "windows", "system32");
+        var files = Directory.GetFiles(dxvkPath);
+
+        foreach (string fileName in files)
+        {
+            File.Copy(fileName, Path.Combine(system32, Path.GetFileName(fileName)), true);
+        }
+
+        // Create symlinks to nvngx.dll and _nvngx.dll in the GamePath/game folder. For some reason it doesn't work if you put them in system32.
+        // If NvngxOverride is set, assume the files/symlinks are already there. For Nix compatibility, mostly.
+        if (!string.IsNullOrEmpty(DxvkSettings.NvngxFolder) && Directory.Exists(DxvkSettings.NvngxFolder) && !DxvkSettings.NvngxOverride)
+        {
+            string[] targets = { "nvngx.dll", "_nvngx.dll"};
+            foreach (var target in targets)
+            {
+                var source = new FileInfo(Path.Combine(DxvkSettings.NvngxFolder, target));
+                var destination = new FileInfo(Path.Combine(GamePath.FullName, "game", target));
+                if (source.Exists)
+                {
+                    if (!destination.Exists) // No file, create link.
+                    {
+                        destination.CreateAsSymbolicLink(source.FullName);
+                        Log.Verbose($"Making symbolic link at {destination.FullName} to {source.FullName}");
+                    }
+                    else if (destination.ResolveLinkTarget(false) is null) // File exists, is not a symlink. Delete and create link.
+                    {
+                        destination.Delete();
+                        destination.CreateAsSymbolicLink(source.FullName);
+                        Log.Verbose($"Replacing file at {destination.FullName} with symbolic link to {source.FullName}");
+                    }
+                    else if (destination.ResolveLinkTarget(true).FullName != source.FullName) // Link exists, but does not point to source. Replace.
+                    {
+                        destination.Delete();
+                        destination.CreateAsSymbolicLink(source.FullName);
+                        Log.Verbose($"Symbolic link at {destination.FullName} incorrectly links to {destination.ResolveLinkTarget(true).FullName}. Replacing with link to {source.FullName}");
+                    }
+                    else
+                        Log.Verbose($"Symbolic link at {destination.FullName} to {source.FullName} is correct.");
+                }
+                else
+                    Log.Error($"Missing Nvidia dll! DLSS may not work. {target} not found in {DxvkSettings.NvngxFolder}");
+            }
+        }
+
+        // 32-bit files for Directx9. Only needed for external programs.
+        var dxvkPath32 = Path.Combine(dxvkDirectory.FullName, DxvkSettings.NvapiFolderName, "x32");
+        var syswow64 = Path.Combine(Settings.Prefix.FullName, "drive_c", "windows", "syswow64");
+
+        if (Directory.Exists(dxvkPath32))
+        {
+            files = Directory.GetFiles(dxvkPath32);
+
+            foreach (string fileName in files)
+            {
+                File.Copy(fileName, Path.Combine(syswow64, Path.GetFileName(fileName)), true);
+            }
+        }
+    }
+
+    private void UninstallNvngx()
+    {
+        File.Delete(Path.Combine(GamePath.FullName, "game", "nvngx.dll"));
+        File.Delete(Path.Combine(GamePath.FullName, "game", "_nvngx.dll"));
     }
 
     private async Task DownloadTool(DirectoryInfo installDirectory, string downloadUrl)
