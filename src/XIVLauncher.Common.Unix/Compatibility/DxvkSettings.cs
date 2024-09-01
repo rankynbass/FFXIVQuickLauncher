@@ -20,7 +20,7 @@ public class DxvkSettings
 
     public string NvngxFolder { get; }
 
-    public bool NvapiEnabled => !string.IsNullOrEmpty(NvapiFolderName) && Enabled;
+    public bool NvapiEnabled { get; }
 
     public Dictionary<string, string> Environment { get; }
 
@@ -32,6 +32,11 @@ public class DxvkSettings
         NvapiDownloadUrl = nvapiUrl;
         NvngxFolder = nvngxFolder;
         Enabled = enabled;
+
+        // Disable Nvapi if the NvapiFolderName is empty, if Dxvk is not enabled, or if the dxvk version is dxvk-1.x or dxvk-async-1.x
+        NvapiEnabled = (!string.IsNullOrEmpty(NvapiFolderName) && DxvkAllowsNvapi(FolderName) && Enabled);
+        System.Console.WriteLine($"NvapiEnabled = {NvapiEnabled}");
+
 
         var dxvkConfigPath = new DirectoryInfo(Path.Combine(storageFolder, "compatibilitytool", "dxvk"));
         Environment = new Dictionary<string, string>
@@ -69,10 +74,9 @@ public class DxvkSettings
             }
         }
 
-        if (!string.IsNullOrEmpty(NvapiFolderName))
+        if (NvapiEnabled)
         {
             Environment.Add("DXVK_ENABLE_NVAPI", "1");
-            Environment.Add("DXKV_CONFIG", "dxgi.nvapiHack = False; dxgi.hideNvidiaGpu = False");
         }
     }
 
@@ -89,6 +93,12 @@ public class DxvkSettings
         string[] hudvars = customHud.Split(",");
 
         return hudvars.All(hudvar => Regex.IsMatch(hudvar, ALLOWED_WORDS));        
+    }
+
+    public static bool DxvkAllowsNvapi(string dxvkVersion)
+    {
+        var pattern = @"^dxvk-(async-)?1\.\d{1,2}(\.\d)?$";
+        return !Regex.IsMatch(dxvkVersion, pattern);
     }
 
     public static bool MangoHudIsInstalled()

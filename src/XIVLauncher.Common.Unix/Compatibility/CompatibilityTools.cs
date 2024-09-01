@@ -20,6 +20,8 @@ public class CompatibilityTools
     
     private DirectoryInfo dxvkDirectory;
 
+    private DirectoryInfo GamePath;
+
     private StreamWriter logWriter;
 
     public bool IsToolReady { get; private set; }
@@ -36,7 +38,7 @@ public class CompatibilityTools
 
     private Dictionary<string, string> extraEnvironmentVars;
 
-    public CompatibilityTools(WineSettings wineSettings, DxvkSettings dxvkSettings, bool? gamemodeOn, DirectoryInfo toolsFolder, bool isFlatpak, Dictionary<string, string> extraEnvVars = null)
+    public CompatibilityTools(WineSettings wineSettings, DxvkSettings dxvkSettings, bool? gamemodeOn, DirectoryInfo toolsFolder, DirectoryInfo gamePath, bool isFlatpak, Dictionary<string, string> extraEnvVars = null)
     {
         this.Settings = wineSettings;
         this.DxvkSettings = dxvkSettings;
@@ -48,6 +50,8 @@ public class CompatibilityTools
 
         this.wineDirectory = new DirectoryInfo(Path.Combine(toolsFolder.FullName, "wine"));
         this.dxvkDirectory = new DirectoryInfo(Path.Combine(toolsFolder.FullName, "dxvk"));
+
+        this.GamePath = gamePath;
 
         this.logWriter = new StreamWriter(wineSettings.LogFile.FullName);
 
@@ -71,11 +75,10 @@ public class CompatibilityTools
         EnsurePrefix();
         
         if (DxvkSettings.Enabled)
-        {
             await InstallDxvk().ConfigureAwait(false);
-            if (DxvkSettings.NvapiEnabled)
-                await InstallNvapi().ConfigureAwait(false);
-        }
+
+        if (DxvkSettings.NvapiEnabled)
+            await InstallNvapi().ConfigureAwait(false);
 
         IsToolReady = true;
     }
@@ -118,7 +121,9 @@ public class CompatibilityTools
         if (!Directory.Exists(dxvkPath))
         {
             Log.Information($"DXVK Nvapi does not exist, downloading {DxvkSettings.NvapiDownloadUrl}");
-            await DownloadTool(dxvkDirectory, DxvkSettings.DownloadUrl).ConfigureAwait(false);
+            var nvapiFolder = new DirectoryInfo(Path.Combine(dxvkDirectory.FullName, DxvkSettings.NvapiFolderName));
+            nvapiFolder.Create();
+            await DownloadTool(nvapiFolder, DxvkSettings.NvapiDownloadUrl).ConfigureAwait(false);
         }
 
         var system32 = Path.Combine(Settings.Prefix.FullName, "drive_c", "windows", "system32");
@@ -129,19 +134,15 @@ public class CompatibilityTools
             File.Copy(fileName, Path.Combine(system32, Path.GetFileName(fileName)), true);
         }
 
-        // Copy nvngx files
+        // Copy nvngx.dll and _nvngx.dll to the GamePath. For some reason it doesn't work if you put them in system32.
         if (!string.IsNullOrEmpty(DxvkSettings.NvngxFolder) && Directory.Exists(DxvkSettings.NvngxFolder))
         {
-            files = Directory.GetFiles(DxvkSettings.NvngxFolder);
-
-            foreach (string fileName in files)
-            {
-                File.Copy(fileName, Path.Combine(system32, Path.GetFileName(fileName)), true);
-            }
+            File.Copy(Path.Combine(DxvkSettings.NvngxFolder, "nvngx.dll"), Path.Combine(GamePath.FullName, "game", "nvngx.dll"), true);
+            File.Copy(Path.Combine(DxvkSettings.NvngxFolder, "_nvngx.dll"), Path.Combine(GamePath.FullName, "game", "_nvngx.dll"), true);
         }
 
         // 32-bit files for Directx9. Only needed for external programs.
-        var dxvkPath32 = Path.Combine(dxvkDirectory.FullName, DxvkSettings.FolderName, "x32");
+        var dxvkPath32 = Path.Combine(dxvkDirectory.FullName, DxvkSettings.NvapiFolderName, "x32");
         var syswow64 = Path.Combine(Settings.Prefix.FullName, "drive_c", "windows", "syswow64");
 
         if (Directory.Exists(dxvkPath32))
@@ -153,6 +154,12 @@ public class CompatibilityTools
                 File.Copy(fileName, Path.Combine(syswow64, Path.GetFileName(fileName)), true);
             }
         }
+    }
+
+    private void UninstallNvngx()
+    {
+        File.Delete(Path.Combine(GamePath.FullName, "game", "nvngx.dll"));
+        File.Delete(Path.Combine(GamePath.FullName, "game", "_nvngx.dll"));
     }
 
     private async Task DownloadTool(DirectoryInfo installDirectory, string downloadUrl)
