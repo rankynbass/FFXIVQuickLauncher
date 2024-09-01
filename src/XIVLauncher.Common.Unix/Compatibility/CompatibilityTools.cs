@@ -117,6 +117,7 @@ public class CompatibilityTools
                 await DownloadTool(compatToolsDirectory, Settings.DownloadUrl).ConfigureAwait(false);
             }
             EnsurePrefix();
+            UninstallNvngx();
             IsToolReady = true;
             return;
         }
@@ -489,8 +490,12 @@ public class CompatibilityTools
             wineEnvironmentVariables.Add("LD_PRELOAD", MergeLDPreload("libgamemodeauto.so.0" , Environment.GetEnvironmentVariable("LD_PRELOAD")));
 
         foreach (var dxvkVar in DxvkSettings.Environment)
+        {
+            // Don't add DXVK_ENABLE_NVAPI to the environment. Let Proton handle it.
+            if (dxvkVar.Key == "DXVK_ENABLE_NVAPI" && Settings.IsProton)
+                continue;
             wineEnvironmentVariables.Add(dxvkVar.Key, dxvkVar.Value);
-
+        }
         MergeDictionaries(psi.Environment, wineEnvironmentVariables);
         MergeDictionaries(psi.Environment, extraEnvironmentVars);       // Allow extraEnvironmentVars to override what we set here.
         MergeDictionaries(psi.Environment, environment);
