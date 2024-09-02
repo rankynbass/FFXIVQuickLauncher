@@ -162,6 +162,13 @@ public class CompatibilityTools
         await DownloadTool(dxvkDirectory, DxvkSettings.DownloadUrl).ConfigureAwait(false);
     }
 
+    public async Task DownloadNvapi()
+    {
+        var nvapiFolder = new DirectoryInfo(Path.Combine(dxvkDirectory.FullName, DxvkSettings.NvapiFolderName));
+        nvapiFolder.Create();
+        await DownloadTool(nvapiFolder, DxvkSettings.NvapiDownloadUrl).ConfigureAwait(false);
+    }
+
     private async Task InstallDxvk()
     {
         var dxvkPath = Path.Combine(dxvkDirectory.FullName, DxvkSettings.FolderName, "x64");
