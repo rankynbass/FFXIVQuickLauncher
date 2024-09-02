@@ -184,7 +184,7 @@ public class CompatibilityTools
             }
         }
     }
-
+    
     private void UninstallNvngx()
     {
         File.Delete(Path.Combine(GamePath.FullName, "game", "nvngx.dll"));
