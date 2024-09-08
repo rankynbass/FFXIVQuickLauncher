@@ -14,13 +14,30 @@ public class DxvkSettings
 
     public string DownloadUrl { get; }
 
+    public string NvapiFolderName { get; }
+
+    public string NvapiDownloadUrl { get; }
+
+    public string NvngxFolder { get; }
+
+    public bool NvapiEnabled { get; }
+
+    public bool NvngxOverride { get; }
+
     public Dictionary<string, string> Environment { get; }
 
-    public DxvkSettings(string folder, string url, string storageFolder, bool async, int maxFrameRate, bool dxvkHudEnabled, string dxvkHudString, bool mangoHudEnabled = false, bool mangoHudCustomIsFile = false, string customMangoHud = "", bool enabled = true)
+    public DxvkSettings(string folder, string url, string storageFolder, bool async, int maxFrameRate, bool dxvkHudEnabled, string dxvkHudString, bool mangoHudEnabled = false, bool mangoHudCustomIsFile = false, string customMangoHud = "", bool enabled = true, string nvapiFolder = "", string nvapiUrl = "", string nvngxFolder = "")
     {
         FolderName = folder;
         DownloadUrl = url;
+        NvapiFolderName = nvapiFolder;
+        NvapiDownloadUrl = nvapiUrl;
+        NvngxFolder = nvngxFolder;
         Enabled = enabled;
+        NvngxOverride = !string.IsNullOrEmpty(NvapiFolderName) && string.IsNullOrEmpty(NvngxFolder);
+
+        // Disable Nvapi if the NvapiFolderName is empty, if Dxvk is not enabled, or if the dxvk version is dxvk-1.x or dxvk-async-1.x
+        NvapiEnabled = (!string.IsNullOrEmpty(NvapiFolderName) && DxvkAllowsNvapi(FolderName) && Enabled);
 
         var dxvkConfigPath = new DirectoryInfo(Path.Combine(storageFolder, "compatibilitytool", "dxvk"));
         Environment = new Dictionary<string, string>
@@ -57,6 +74,11 @@ public class DxvkSettings
                 Environment.Add("MANGOHUD_CONFIG", customMangoHud);
             }
         }
+
+        if (NvapiEnabled)
+        {
+            Environment.Add("DXVK_ENABLE_NVAPI", "1");
+        }
     }
 
     public static bool DxvkHudStringIsValid(string customHud)
@@ -72,6 +94,12 @@ public class DxvkSettings
         string[] hudvars = customHud.Split(",");
 
         return hudvars.All(hudvar => Regex.IsMatch(hudvar, ALLOWED_WORDS));        
+    }
+
+    public static bool DxvkAllowsNvapi(string dxvkVersion)
+    {
+        var pattern = @"^dxvk-(async-)?1\.\d{1,2}(\.\d)?$";
+        return !Regex.IsMatch(dxvkVersion, pattern);
     }
 
     public static bool MangoHudIsInstalled()
