@@ -484,7 +484,6 @@ public class CompatibilityTools
         if (!String.IsNullOrWhiteSpace(Settings.WineDLLOverrides))
             wineOverrides += (";" + Settings.WineDLLOverrides);
         wineEnvironmentVariables.Add("WINEDLLOVERRIDES", wineOverrides);
-        Console.WriteLine($"Using WINEDLLOVERRIDES=\"{wineEnvironmentVariables["WINEDLLOVERRIDES"]}\"");
 
         if (!string.IsNullOrEmpty(Settings.DebugVars))
         {

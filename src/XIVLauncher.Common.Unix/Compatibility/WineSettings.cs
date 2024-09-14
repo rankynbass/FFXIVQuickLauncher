@@ -1,5 +1,6 @@
-﻿using System;
-using System.IO;
+﻿using System.IO;
+using System.Text.RegularExpressions;
+using System.Linq;
 
 namespace XIVLauncher.Common.Unix.Compatibility;
 
@@ -107,25 +108,13 @@ public class WineSettings
         DownloadUrl = downloadUrl;
         RuntimePath = string.IsNullOrEmpty(runtimePath) ? "" : Path.Combine(runtimePath, "_v2-entry-point");
         RuntimeUrl = runtimeUrl;
+        WineDLLOverrides = WineDLLOverrideIsValid(wineDLLOverrides) ? wineDLLOverrides : "";
 
-        this.EsyncOn = esyncOn ?? false;
-        this.FsyncOn = fsyncOn ?? false;
-        this.DebugVars = debugVars;
-        this.LogFile = logFile;
-        this.Prefix = prefix;
-        WineDLLOverrides = "";
-        var overrides = wineDLLOverrides.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        // Skip any overrides that contain dlls we already override.
-        foreach (var part in overrides)
-        {
-            if (part.Contains("dxgi") || part.Contains("d3d11") || part.Contains("mscoree") || part.Contains("msquic"))
-            {
-                Console.WriteLine($"Warning! Your Wine DLL Overrides \"{part}\" contains dxgi/d3d11/mscoree/msquic and will be ignored.");
-                continue;
-            }
-            WineDLLOverrides += (part + ";");
-        }
-        WineDLLOverrides = WineDLLOverrides.TrimEnd(';');
+        EsyncOn = esyncOn ?? false;
+        FsyncOn = fsyncOn ?? false;
+        DebugVars = debugVars;
+        LogFile = logFile;
+        Prefix = prefix;
     }
 
     private string WineCheck(string dir)
@@ -134,5 +123,17 @@ public class WineSettings
         if (directory.Name == "bin")
             return directory.FullName;
         return Path.Combine(directory.FullName, "bin");            
+    }
+
+    public static bool WineDLLOverrideIsValid(string dlls)
+    {
+        string[] invalid = { "msquic", "mscoree", "d3d9", "d3d11", "d3d10core", "dxgi" };
+        var format = @"^(?:(?:[a-zA-Z0-9_\-\.]+,?)+=(?:n,b|b,n|n|b|d|,|);?)+$";
+
+        if (string.IsNullOrEmpty(dlls)) return true;
+        if (invalid.Any(s => dlls.Contains(s))) return false;
+        if (Regex.IsMatch(dlls, format)) return true;
+
+        return false;
     }
 }
