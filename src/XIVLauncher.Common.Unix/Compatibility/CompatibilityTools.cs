@@ -117,7 +117,6 @@ public class CompatibilityTools
                 await DownloadTool(compatToolsDirectory, Settings.DownloadUrl).ConfigureAwait(false);
             }
             EnsurePrefix();
-            UninstallNvngx();
             IsToolReady = true;
             return;
         }
