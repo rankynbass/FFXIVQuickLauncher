@@ -26,7 +26,7 @@ public class DxvkSettings
 
     public Dictionary<string, string> Environment { get; }
 
-    public DxvkSettings(string folder, string url, string storageFolder, bool async, int maxFrameRate, bool dxvkHudEnabled, string dxvkHudString, bool mangoHudEnabled = false, bool mangoHudCustomIsFile = false, string customMangoHud = "", bool enabled = true, string nvapiFolder = "", string nvapiUrl = "", string nvngxFolder = "")
+    public DxvkSettings(string folder, string url, string storageFolder, bool async, bool gplasync, int maxFrameRate, bool dxvkHudEnabled, string dxvkHudString, bool mangoHudEnabled = false, bool mangoHudCustomIsFile = false, string customMangoHud = "", bool enabled = true, string nvapiFolder = "", string nvapiUrl = "", string nvngxFolder = "")
     {
         FolderName = folder;
         DownloadUrl = url;
@@ -51,8 +51,13 @@ public class DxvkSettings
         
         if (async)
             Environment.Add("DXVK_ASYNC", "1");
-        else
+        else if (folder.Contains("async"))
             Environment.Add("DXVK_ASYNC", "0");
+
+        if (gplasync)
+            Environment.Add("DXVK_GPLASYNCCACHE", "1");
+        else if (folder.Contains("gplasync"))
+            Environment.Add("DXVK_GPLASYNCCACHE", "0");
             
         if (dxvkHudEnabled)
             Environment.Add("DXVK_HUD", DxvkHudStringIsValid(dxvkHudString) ? dxvkHudString : "1");
