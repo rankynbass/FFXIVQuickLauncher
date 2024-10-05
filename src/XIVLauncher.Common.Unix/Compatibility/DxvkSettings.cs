@@ -2,6 +2,7 @@ using System.IO;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using System.Linq;
+using System.Threading.Tasks;
 using Serilog;
 
 namespace XIVLauncher.Common.Unix.Compatibility;
@@ -14,31 +15,14 @@ public class DxvkSettings
 
     public string DownloadUrl { get; }
 
-    public string NvapiFolderName { get; }
-
-    public string NvapiDownloadUrl { get; }
-
-    public string NvngxFolder { get; }
-
-    public bool NvapiEnabled { get; }
-
-    public bool NvngxOverride { get; }
-
     public Dictionary<string, string> Environment { get; }
 
-    public DxvkSettings(string folder, string url, string storageFolder, bool async, bool gplasync, int maxFrameRate, bool dxvkHudEnabled, string dxvkHudString, bool mangoHudEnabled = false, bool mangoHudCustomIsFile = false, string customMangoHud = "", bool enabled = true, string nvapiFolder = "", string nvapiUrl = "", string nvngxFolder = "")
+    // Constructor for Wine
+    public DxvkSettings(bool enabled, string folder, string url, string storageFolder, bool async, bool gplasync, int maxFrameRate, bool dxvkHudEnabled, string dxvkHudString, bool mangoHudEnabled = false, bool mangoHudCustomIsFile = false, string customMangoHud = "")
     {
         FolderName = folder;
         DownloadUrl = url;
-        NvapiFolderName = nvapiFolder;
-        NvapiDownloadUrl = nvapiUrl;
-        NvngxFolder = nvngxFolder;
         Enabled = enabled;
-
-        NvngxOverride = !string.IsNullOrEmpty(NvapiFolderName) && string.IsNullOrEmpty(NvngxFolder);
-
-        // Disable Nvapi if the NvapiFolderName is empty, if Dxvk is not enabled, or if the dxvk version is dxvk-1.x or dxvk-async-1.x
-        NvapiEnabled = (!string.IsNullOrEmpty(NvapiFolderName) && DxvkAllowsNvapi(FolderName) && Enabled);
 
         var dxvkConfigPath = new DirectoryInfo(Path.Combine(storageFolder, "compatibilitytool", "dxvk"));
         Environment = new Dictionary<string, string>
@@ -46,17 +30,40 @@ public class DxvkSettings
             { "DXVK_LOG_PATH", Path.Combine(storageFolder, "logs") },
         };
         
+        SetupEnvironment(folder.Contains("async") ? async : null, folder.Contains("gplasync") ? gplasync : null, maxFrameRate, dxvkHudEnabled, dxvkHudString, mangoHudEnabled, mangoHudCustomIsFile, customMangoHud);
+    }
+
+    // Constructor for Proton
+    public DxvkSettings(bool enabled, string storageFolder, int maxFrameRate, bool dxvkHudEnabled, string dxvkHudString, bool mangoHudEnabled = false, bool mangoHudCustomIsFile = false, string customMangoHud = "")
+    {
+        FolderName = "";
+        DownloadUrl = "";
+        Enabled = enabled;
+        var dxvkConfigPath = new DirectoryInfo(Path.Combine(storageFolder, "compatibilitytool", "dxvk"));
+        Environment = new Dictionary<string, string>
+        {
+            { "DXVK_LOG_PATH", Path.Combine(storageFolder, "logs") },
+        };
+
+        SetupEnvironment(null, null, maxFrameRate, dxvkHudEnabled, dxvkHudString, mangoHudEnabled, mangoHudCustomIsFile, customMangoHud);
+    }
+
+    private void SetupEnvironment(bool? async, bool? gplasync, int maxFrameRate, bool dxvkHudEnabled, string dxvkHudString, bool mangoHudEnabled, bool mangoHudCustomIsFile, string customMangoHud)
+    {
+        // Fix for Wine > 9.17
+        Environment.Add("DXVK_CONFIG", "dxgi.deferSurfaceCreation = True");
+
         if (maxFrameRate != 0)
             Environment.Add("DXVK_FRAME_RATE", (maxFrameRate).ToString());
         
-        if (async)
+        if (async == true)
             Environment.Add("DXVK_ASYNC", "1");
-        else if (folder.Contains("async"))
+        else if (async == false)
             Environment.Add("DXVK_ASYNC", "0");
 
-        if (gplasync)
+        if (gplasync == true)
             Environment.Add("DXVK_GPLASYNCCACHE", "1");
-        else if (folder.Contains("gplasync"))
+        else if (gplasync == false)
             Environment.Add("DXVK_GPLASYNCCACHE", "0");
             
         if (dxvkHudEnabled)
@@ -76,11 +83,6 @@ public class DxvkSettings
             {
                 Environment.Add("MANGOHUD_CONFIG", customMangoHud);
             }
-        }
-
-        if (NvapiEnabled || NvngxOverride)
-        {
-            Environment.Add("DXVK_ENABLE_NVAPI", "1");
         }
     }
 
@@ -114,5 +116,43 @@ public class DxvkSettings
         if (File.Exists(usrLib64) || File.Exists(usrLib) || File.Exists(flatpak) || File.Exists(debuntu))
             return true;
         return false;
+    }
+
+    internal async Task Install(DirectoryInfo dxvkDirectory, DirectoryInfo prefix)
+    {
+        if (string.IsNullOrEmpty(FolderName) || string.IsNullOrEmpty(DownloadUrl))
+        {
+            Log.Error($"Invalid Dxvk information - Dxvk Folder = \"{FolderName}\", Download Url = \"{DownloadUrl}\"");
+            return;
+        }
+        
+        var dxvkPath = Path.Combine(dxvkDirectory.FullName, FolderName, "x64");
+        if (!Directory.Exists(dxvkPath))
+        {
+            Log.Information($"DXVK does not exist, downloading {DownloadUrl}");
+            await CompatibilityTools.DownloadTool(dxvkDirectory, DownloadUrl).ConfigureAwait(false);
+        }
+
+        var system32 = Path.Combine(prefix.FullName, "drive_c", "windows", "system32");
+        var files = Directory.GetFiles(dxvkPath);
+
+        foreach (string fileName in files)
+        {
+            File.Copy(fileName, Path.Combine(system32, Path.GetFileName(fileName)), true);
+        }
+
+        // 32-bit files. Probably not needed anymore, but may be useful for running other programs in prefix.
+        var dxvkPath32 = Path.Combine(dxvkDirectory.FullName, FolderName, "x32");
+        var syswow64 = Path.Combine(prefix.FullName, "drive_c", "windows", "syswow64");
+
+        if (Directory.Exists(dxvkPath32))
+        {
+            files = Directory.GetFiles(dxvkPath32);
+
+            foreach (string fileName in files)
+            {
+                File.Copy(fileName, Path.Combine(syswow64, Path.GetFileName(fileName)), true);
+            }
+        }
     }
 }

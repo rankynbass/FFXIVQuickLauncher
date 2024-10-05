@@ -64,17 +64,19 @@ public class WineSettings
 
     public string RuntimeUrl;
 
+    private string ExtraOverrides;
+
     public bool EsyncOn { get; private set; }
 
     public bool FsyncOn { get; private set; }
-
-    public string WineDLLOverrides { get; private set; }
 
     public string DebugVars { get; private set; }
 
     public FileInfo LogFile { get; private set; }
 
     public DirectoryInfo Prefix { get; private set; }
+
+    private const string WINEDLLOVERRIDES = "msquic=,mscoree=n,b;d3d9,d3d10core,d3d11,dxgi=";
 
     // Runner will be the steam linux runtime if used, or wine/proton if not used.
     public string Runner => string.IsNullOrEmpty(RuntimePath) ? WinePath : RuntimePath;
@@ -99,22 +101,45 @@ public class WineSettings
         If steam runtime, it'll be: /path/to/runtime --verb=waitforexitandrun -- /path/to/proton runinprefix command
     */
 
-    public WineSettings(bool isProton, string wineFolder, string downloadUrl, string runtimePath, string runtimeUrl, string wineDLLOverrides, string debugVars, FileInfo logFile, DirectoryInfo prefix, bool? esyncOn, bool? fsyncOn)
+    // Constructor for Wine
+    public WineSettings(string wineFolder, string downloadUrl, string extraOverrides, string debugVars, FileInfo logFile, DirectoryInfo prefix, bool? esyncOn, bool? fsyncOn)
     {
-        IsProton = isProton;
-        BinPath = isProton ? wineFolder : WineCheck(wineFolder);
-        WinePath = isProton ? Path.Combine(BinPath, "proton") : File.Exists(Path.Combine(BinPath, "wine64")) ? Path.Combine(BinPath, "wine64") : Path.Combine(BinPath, "wine");
-        WineServerPath = isProton ? Path.Combine(BinPath, "files", "bin", "wineserver") : Path.Combine(BinPath, "wineserver");
+        IsProton = false;
+        BinPath = WineCheck(wineFolder);
+        WinePath = File.Exists(Path.Combine(BinPath, "wine64")) ? Path.Combine(BinPath, "wine64") : Path.Combine(BinPath, "wine");
+        WineServerPath = Path.Combine(BinPath, "wineserver");
+        DownloadUrl = downloadUrl;
+        RuntimePath = "";
+        RuntimeUrl = "";
+        ExtraOverrides = WineDLLOverrideIsValid(extraOverrides) ? ";" + extraOverrides : "";
+        EsyncOn = esyncOn ?? false;
+        FsyncOn = fsyncOn ?? false;
+        DebugVars = debugVars;
+        LogFile = logFile;
+        Prefix = prefix;       
+    }
+
+    // Constructor for Proton
+    public WineSettings(string wineFolder, string downloadUrl, string runtimePath, string runtimeUrl, string extraOverrides, string debugVars, FileInfo logFile, DirectoryInfo prefix, bool? esyncOn, bool? fsyncOn)
+    {
+        IsProton = true;
+        BinPath = wineFolder;
+        WinePath = Path.Combine(BinPath, "proton");
+        WineServerPath = Path.Combine(BinPath, "files", "bin", "wineserver");
         DownloadUrl = downloadUrl;
         RuntimePath = string.IsNullOrEmpty(runtimePath) ? "" : Path.Combine(runtimePath, "_v2-entry-point");
-        RuntimeUrl = runtimeUrl;
-        WineDLLOverrides = WineDLLOverrideIsValid(wineDLLOverrides) ? wineDLLOverrides : "";
-
+        RuntimeUrl = runtimeUrl;       
+        ExtraOverrides = WineDLLOverrideIsValid(extraOverrides) ? ";" + extraOverrides : "";
         EsyncOn = esyncOn ?? false;
         FsyncOn = fsyncOn ?? false;
         DebugVars = debugVars;
         LogFile = logFile;
         Prefix = prefix;
+    }
+
+    internal string GetWineDLLOverrides(bool dxvk)
+    {
+        return WINEDLLOVERRIDES + (dxvk ? "n,b" : "b")  + ExtraOverrides;
     }
 
     private string WineCheck(string dir)

@@ -28,44 +28,29 @@ public class CompatibilityTools
 
     public bool IsToolReady { get; private set; }
 
-    public WineSettings Settings { get; private set; }
+    public GameSettings Game { get; private set; }
 
-    public DxvkSettings DxvkSettings { get; private set; }
+    public WineSettings Wine { get; private set; }
 
-    private DirectoryInfo GamePath;
+    public DxvkSettings Dxvk { get; private set; }
 
-    private DirectoryInfo GameConfigPath;
+    public DLSSSettings DLSS { get; private set; }
 
-    public bool IsToolDownloaded => File.Exists(Settings.WinePath) && Settings.Prefix.Exists;
+    public bool IsToolDownloaded => File.Exists(Wine.WinePath) && Wine.Prefix.Exists;
 
-    public bool IsFlatpak { get; }
-    
-    private readonly bool gamemodeOn;
-
-    private const string GAMEID = "39210";
-
-    private Dictionary<string, string> extraEnvironmentVars;
-
-    public CompatibilityTools(WineSettings wineSettings, DxvkSettings dxvkSettings, bool? gamemodeOn, DirectoryInfo toolsFolder, DirectoryInfo steamFolder, DirectoryInfo gamePath, DirectoryInfo gameConfigPath, bool isFlatpak, Dictionary<string, string> extraEnvVars = null)
+    public CompatibilityTools(GameSettings gameSettings, WineSettings wineSettings, DxvkSettings dxvkSettings, DLSSSettings dlssSettings)
     {
-        this.Settings = wineSettings;
-        this.DxvkSettings = dxvkSettings;
-        this.gamemodeOn = gamemodeOn ?? false;
-        this.GamePath = gamePath;
-        this.GameConfigPath = gameConfigPath;
+        this.Game = gameSettings;
+        this.Wine = wineSettings;
+        this.Dxvk = dxvkSettings;
+        this.DLSS = dlssSettings;
 
-        // These are currently unused. Here for future use. 
-        this.IsFlatpak = isFlatpak;
-        this.extraEnvironmentVars = extraEnvVars ?? new Dictionary<string, string>();
+        this.wineDirectory = new DirectoryInfo(Path.Combine(Game.ToolsFolder.FullName, "wine"));
+        this.dxvkDirectory = new DirectoryInfo(Path.Combine(Game.ToolsFolder.FullName, "dxvk"));
+        this.compatToolsDirectory = new DirectoryInfo(Path.Combine(Game.SteamFolder.FullName, "compatibilitytools.d"));
+        this.commonDirectory = new DirectoryInfo(Path.Combine(Game.SteamFolder.FullName, "steamapps", "common"));
 
-        this.wineDirectory = new DirectoryInfo(Path.Combine(toolsFolder.FullName, "wine"));
-        this.dxvkDirectory = new DirectoryInfo(Path.Combine(toolsFolder.FullName, "dxvk"));
-        this.compatToolsDirectory = new DirectoryInfo(Path.Combine(steamFolder.FullName, "compatibilitytools.d"));
-        this.commonDirectory = new DirectoryInfo(Path.Combine(steamFolder.FullName, "steamapps", "common"));
-
-        this.GamePath = gamePath;
-
-        this.logWriter = new StreamWriter(wineSettings.LogFile.FullName);
+        this.logWriter = new StreamWriter(Wine.LogFile.FullName);
 
         if (!this.wineDirectory.Exists)
             this.wineDirectory.Create();
@@ -73,48 +58,48 @@ public class CompatibilityTools
         if (!this.dxvkDirectory.Exists)
             this.dxvkDirectory.Create();
 
-        if (!this.compatToolsDirectory.Exists && wineSettings.IsProton)
+        if (!this.compatToolsDirectory.Exists && Wine.IsProton)
             this.compatToolsDirectory.Create();
 
-        if (!this.commonDirectory.Exists && wineSettings.IsRuntime)
+        if (!this.commonDirectory.Exists && Wine.IsRuntime)
             this.commonDirectory.Create();
 
-        if (!wineSettings.Prefix.Exists)
+        if (!Wine.Prefix.Exists)
         {
-            wineSettings.Prefix.Create();
-            if (wineSettings.IsProton)
-                File.CreateSymbolicLink(Path.Combine(wineSettings.Prefix.FullName, "pfx"), wineSettings.Prefix.FullName);
+            Wine.Prefix.Create();
+            if (Wine.IsProton)
+                File.CreateSymbolicLink(Path.Combine(Wine.Prefix.FullName, "pfx"), Wine.Prefix.FullName);
 
         }
         else
         {
-            if (File.Exists(Path.Combine(wineSettings.Prefix.FullName, "pfx")))
-                File.Delete(Path.Combine(wineSettings.Prefix.FullName, "pfx"));
-            if (wineSettings.IsProton && !Directory.Exists(Path.Combine(wineSettings.Prefix.FullName, "pfx")))
-                File.CreateSymbolicLink(Path.Combine(wineSettings.Prefix.FullName, "pfx"), wineSettings.Prefix.FullName);
+            if (File.Exists(Path.Combine(Wine.Prefix.FullName, "pfx")))
+                File.Delete(Path.Combine(Wine.Prefix.FullName, "pfx"));
+            if (Wine.IsProton && !Directory.Exists(Path.Combine(Wine.Prefix.FullName, "pfx")))
+                File.CreateSymbolicLink(Path.Combine(Wine.Prefix.FullName, "pfx"), Wine.Prefix.FullName);
         }
     }
 
     public async Task EnsureTool(DirectoryInfo tempPath)
     {
         // Download the container if it's missing
-        if (Settings.IsRuntime && !File.Exists(Settings.Runner))
+        if (Wine.IsRuntime && !File.Exists(Wine.Runner))
         {
-            if (string.IsNullOrEmpty(Settings.RuntimeUrl))
+            if (string.IsNullOrEmpty(Wine.RuntimeUrl))
                 throw new FileNotFoundException($"Steam runtime selected, but is not present, and no download url provided.");
-            Log.Information($"Steam Linux Runtime does not exist, downloading {Settings.RuntimeUrl}");
-            await DownloadTool(commonDirectory, Settings.RuntimeUrl).ConfigureAwait(false);
+            Log.Information($"Steam Linux Runtime does not exist, downloading {Wine.RuntimeUrl}");
+            await DownloadTool(commonDirectory, Wine.RuntimeUrl).ConfigureAwait(false);
         }
 
         // Download Proton if it's missing, ensure the proton prefix, and return.
-        if (Settings.IsProton)
+        if (Wine.IsProton)
         {
-            if (!File.Exists(Settings.WinePath))
+            if (!File.Exists(Wine.WinePath))
             {
-                if (string.IsNullOrEmpty(Settings.DownloadUrl))
-                    throw new FileNotFoundException($"Proton not found at the given path; {Settings.WinePath}, and no download url provided.");
-                Log.Information($"Compatibility tool (Proton) does not exist. Downloading {Settings.DownloadUrl} to {compatToolsDirectory.FullName}");
-                await DownloadTool(compatToolsDirectory, Settings.DownloadUrl).ConfigureAwait(false);
+                if (string.IsNullOrEmpty(Wine.DownloadUrl))
+                    throw new FileNotFoundException($"Proton not found at the given path; {Wine.WinePath}, and no download url provided.");
+                Log.Information($"Compatibility tool (Proton) does not exist. Downloading {Wine.DownloadUrl} to {compatToolsDirectory.FullName}");
+                await DownloadTool(compatToolsDirectory, Wine.DownloadUrl).ConfigureAwait(false);
             }
             EnsurePrefix();
             IsToolReady = true;
@@ -122,161 +107,66 @@ public class CompatibilityTools
         }
 
         // Download Wine if it's missing
-        if (!File.Exists(Settings.WinePath))
+        if (!File.Exists(Wine.WinePath))
         {
-            if (string.IsNullOrEmpty(Settings.DownloadUrl))
-                throw new FileNotFoundException($"Wine not found at the given path: {Settings.WinePath}, and no download url provided.");
-            Log.Information($"Compatibility tool (Wine) does not exist, downloading {Settings.DownloadUrl} to {wineDirectory.FullName}");
-            await DownloadTool(wineDirectory, Settings.DownloadUrl).ConfigureAwait(false);
+            if (string.IsNullOrEmpty(Wine.DownloadUrl))
+                throw new FileNotFoundException($"Wine not found at the given path: {Wine.WinePath}, and no download url provided.");
+            Log.Information($"Compatibility tool (Wine) does not exist, downloading {Wine.DownloadUrl} to {wineDirectory.FullName}");
+            await DownloadTool(wineDirectory, Wine.DownloadUrl).ConfigureAwait(false);
         }
         EnsurePrefix();
         
+        Console.WriteLine($"Dxvk.Enabled={Dxvk.Enabled}");
+        Console.WriteLine($"DLSS.Enabled={DLSS.Enabled}");
+        Console.WriteLine($"DLSS.NoOverwrite={DLSS.NoOverwrite}");
         // Download and install DXVK if enabled
-        if (DxvkSettings.Enabled)
-            await InstallDxvk().ConfigureAwait(false);
-
-        if (DxvkSettings.NvapiEnabled)
-            await InstallNvapi().ConfigureAwait(false);
+        if (Dxvk.Enabled)
+        {
+            Console.WriteLine("Installing Dxvk...");
+            await Dxvk.Install(dxvkDirectory, Wine.Prefix).ConfigureAwait(false);
+        }
+        if (DLSS.Enabled)
+        {
+            if (!DLSS.NoOverwrite)
+            {
+                Console.WriteLine($"Installing Nvidia Files to {Game.GameFolder.FullName}");
+                DLSS.InstallNvidaFiles(Game.GameFolder);
+            }
+            Console.WriteLine("Installing Nvapi");
+            await DLSS.Install(dxvkDirectory, Wine.Prefix).ConfigureAwait(false);
+        }
 
         IsToolReady = true;
     }
 
     public async Task DownloadWine()
     {
-        await DownloadTool(wineDirectory, Settings.DownloadUrl).ConfigureAwait(false);
+        await DownloadTool(wineDirectory, Wine.DownloadUrl).ConfigureAwait(false);
     }
 
     public async Task DownloadProton()
     {
-        await DownloadTool(compatToolsDirectory, Settings.DownloadUrl).ConfigureAwait(false);
+        await DownloadTool(compatToolsDirectory, Wine.DownloadUrl).ConfigureAwait(false);
     }
 
     public async Task DownloadRuntime()
     {
-        await DownloadTool(commonDirectory, Settings.RuntimeUrl).ConfigureAwait(false);
+        await DownloadTool(commonDirectory, Wine.RuntimeUrl).ConfigureAwait(false);
     }
 
     public async Task DownloadDxvk()
     {
-        await DownloadTool(dxvkDirectory, DxvkSettings.DownloadUrl).ConfigureAwait(false);
+        await DownloadTool(dxvkDirectory, Dxvk.DownloadUrl).ConfigureAwait(false);
     }
 
     public async Task DownloadNvapi()
     {
-        var nvapiFolder = new DirectoryInfo(Path.Combine(dxvkDirectory.FullName, DxvkSettings.NvapiFolderName));
+        var nvapiFolder = new DirectoryInfo(Path.Combine(dxvkDirectory.FullName, DLSS.FolderName));
         nvapiFolder.Create();
-        await DownloadTool(nvapiFolder, DxvkSettings.NvapiDownloadUrl).ConfigureAwait(false);
+        await DownloadTool(nvapiFolder, DLSS.DownloadUrl).ConfigureAwait(false);
     }
 
-    private async Task InstallDxvk()
-    {
-        var dxvkPath = Path.Combine(dxvkDirectory.FullName, DxvkSettings.FolderName, "x64");
-        if (!Directory.Exists(dxvkPath))
-        {
-            Log.Information($"DXVK does not exist, downloading {DxvkSettings.DownloadUrl}");
-            await DownloadTool(dxvkDirectory, DxvkSettings.DownloadUrl).ConfigureAwait(false);
-        }
-
-        var system32 = Path.Combine(Settings.Prefix.FullName, "drive_c", "windows", "system32");
-        var files = Directory.GetFiles(dxvkPath);
-
-        foreach (string fileName in files)
-        {
-            File.Copy(fileName, Path.Combine(system32, Path.GetFileName(fileName)), true);
-        }
-
-        // 32-bit files. Probably not needed anymore, but may be useful for running other programs in prefix.
-        var dxvkPath32 = Path.Combine(dxvkDirectory.FullName, DxvkSettings.FolderName, "x32");
-        var syswow64 = Path.Combine(Settings.Prefix.FullName, "drive_c", "windows", "syswow64");
-
-        if (Directory.Exists(dxvkPath32))
-        {
-            files = Directory.GetFiles(dxvkPath32);
-
-            foreach (string fileName in files)
-            {
-                File.Copy(fileName, Path.Combine(syswow64, Path.GetFileName(fileName)), true);
-            }
-        }
-    }
-
-    private async Task InstallNvapi()
-    {
-        var dxvkPath = Path.Combine(dxvkDirectory.FullName, DxvkSettings.NvapiFolderName, "x64");
-        if (!Directory.Exists(dxvkPath))
-        {
-            Log.Information($"DXVK Nvapi does not exist, downloading {DxvkSettings.NvapiDownloadUrl}");
-            var nvapiFolder = new DirectoryInfo(Path.Combine(dxvkDirectory.FullName, DxvkSettings.NvapiFolderName));
-            nvapiFolder.Create();
-            await DownloadTool(nvapiFolder, DxvkSettings.NvapiDownloadUrl).ConfigureAwait(false);
-        }
-
-        var system32 = Path.Combine(Settings.Prefix.FullName, "drive_c", "windows", "system32");
-        var files = Directory.GetFiles(dxvkPath);
-
-        foreach (string fileName in files)
-        {
-            File.Copy(fileName, Path.Combine(system32, Path.GetFileName(fileName)), true);
-        }
-
-        // Create symlinks to nvngx.dll and _nvngx.dll in the GamePath/game folder. For some reason it doesn't work if you put them in system32.
-        // If NvngxOverride is set, assume the files/symlinks are already there. For Nix compatibility, mostly.
-        if (!string.IsNullOrEmpty(DxvkSettings.NvngxFolder) && Directory.Exists(DxvkSettings.NvngxFolder) && !DxvkSettings.NvngxOverride)
-        {
-            string[] targets = { "nvngx.dll", "_nvngx.dll"};
-            foreach (var target in targets)
-            {
-                var source = new FileInfo(Path.Combine(DxvkSettings.NvngxFolder, target));
-                var destination = new FileInfo(Path.Combine(GamePath.FullName, "game", target));
-                if (source.Exists)
-                {
-                    if (!destination.Exists) // No file, create link.
-                    {
-                        destination.CreateAsSymbolicLink(source.FullName);
-                        Log.Verbose($"Making symbolic link at {destination.FullName} to {source.FullName}");
-                    }
-                    else if (destination.ResolveLinkTarget(false) is null) // File exists, is not a symlink. Delete and create link.
-                    {
-                        destination.Delete();
-                        destination.CreateAsSymbolicLink(source.FullName);
-                        Log.Verbose($"Replacing file at {destination.FullName} with symbolic link to {source.FullName}");
-                    }
-                    else if (destination.ResolveLinkTarget(true).FullName != source.FullName) // Link exists, but does not point to source. Replace.
-                    {
-                        destination.Delete();
-                        destination.CreateAsSymbolicLink(source.FullName);
-                        Log.Verbose($"Symbolic link at {destination.FullName} incorrectly links to {destination.ResolveLinkTarget(true).FullName}. Replacing with link to {source.FullName}");
-                    }
-                    else
-                        Log.Verbose($"Symbolic link at {destination.FullName} to {source.FullName} is correct.");
-                }
-                else
-                    Log.Error($"Missing Nvidia dll! DLSS may not work. {target} not found in {DxvkSettings.NvngxFolder}");
-            }
-        }
-
-        // 32-bit files for Directx9. Only needed for external programs.
-        var dxvkPath32 = Path.Combine(dxvkDirectory.FullName, DxvkSettings.NvapiFolderName, "x32");
-        var syswow64 = Path.Combine(Settings.Prefix.FullName, "drive_c", "windows", "syswow64");
-
-        if (Directory.Exists(dxvkPath32))
-        {
-            files = Directory.GetFiles(dxvkPath32);
-
-            foreach (string fileName in files)
-            {
-                File.Copy(fileName, Path.Combine(syswow64, Path.GetFileName(fileName)), true);
-            }
-        }
-    }
-
-    private void UninstallNvngx()
-    {
-        File.Delete(Path.Combine(GamePath.FullName, "game", "nvngx.dll"));
-        File.Delete(Path.Combine(GamePath.FullName, "game", "_nvngx.dll"));
-    }
-
-    private async Task DownloadTool(DirectoryInfo installDirectory, string downloadUrl)
+    internal static async Task DownloadTool(DirectoryInfo installDirectory, string downloadUrl)
     {
         using var client = new HttpClient();
         var tempPath = Path.GetTempFileName();
@@ -289,14 +179,14 @@ public class CompatibilityTools
 
     private void ResetPrefix()
     {
-        Settings.Prefix.Refresh();
+        Wine.Prefix.Refresh();
 
-        if (Settings.Prefix.Exists)
-            Settings.Prefix.Delete(true);
+        if (Wine.Prefix.Exists)
+            Wine.Prefix.Delete(true);
 
-        Settings.Prefix.Create();
-        if (Settings.IsProton)
-            File.CreateSymbolicLink(Path.Combine(Settings.Prefix.FullName, "pfx"), Settings.Prefix.FullName);
+        Wine.Prefix.Create();
+        if (Wine.IsProton)
+            File.CreateSymbolicLink(Path.Combine(Wine.Prefix.FullName, "pfx"), Wine.Prefix.FullName);
 
         EnsurePrefix();
     }
@@ -306,10 +196,10 @@ public class CompatibilityTools
         bool runinprefix = true;
         // For proton, if the prefix hasn't been initialized, we need to use "proton run" instead of "proton runinprefix"
         // That will generate these files.
-        if (!File.Exists(Path.Combine(Settings.Prefix.FullName, "config_info")) &&
-            !File.Exists(Path.Combine(Settings.Prefix.FullName, "pfx.lock")) &&
-            !File.Exists(Path.Combine(Settings.Prefix.FullName, "tracked_files")) &&
-            !File.Exists(Path.Combine(Settings.Prefix.FullName, "version")))
+        if (!File.Exists(Path.Combine(Wine.Prefix.FullName, "config_info")) &&
+            !File.Exists(Path.Combine(Wine.Prefix.FullName, "pfx.lock")) &&
+            !File.Exists(Path.Combine(Wine.Prefix.FullName, "tracked_files")) &&
+            !File.Exists(Path.Combine(Wine.Prefix.FullName, "version")))
         {
             runinprefix = false;
         }
@@ -321,30 +211,28 @@ public class CompatibilityTools
     // This can save upwards of 10 seconds, which otherwise might make the user think the launcher has hung or crashed.
     public Process RunWithoutRuntime(string command, bool runinprefix = true, bool redirect = true)
     {
-        if (!Settings.IsProton)
+        if (!Wine.IsProton)
             return RunInPrefix(command, redirectOutput: redirect, writeLog: redirect);
-        var psi = new ProcessStartInfo(Settings.WinePath);
+        var psi = new ProcessStartInfo(Wine.WinePath);
         psi.RedirectStandardOutput = true;
         psi.RedirectStandardError = true;
         psi.UseShellExecute = false;
         // Need to set these or proton will refuse to run.
-        psi.Environment.Add("STEAM_COMPAT_DATA_PATH", Settings.Prefix.FullName);
+        psi.Environment.Add("STEAM_COMPAT_DATA_PATH", Wine.Prefix.FullName);
         psi.Environment.Add("STEAM_COMPAT_CLIENT_INSTALL_PATH", compatToolsDirectory.Parent.FullName);
         // Need to properly set esync/fsync or it can sometimes cause problems with the wineserver.
-        if (!Settings.FsyncOn)
+        if (!Wine.FsyncOn)
         {
             psi.Environment.Add("PROTON_NO_FSYNC", "1");
-            if (!Settings.EsyncOn)
+            if (!Wine.EsyncOn)
                 psi.Environment.Add("PROTON_NO_ESYNC", "1");
         }
-        if (!DxvkSettings.Enabled)
+        if (!Dxvk.Enabled)
             psi.Environment.Add("PROTON_USE_WINED3D", "1");
 
-        var wineOverrides = $"msquic=,mscoree=n,b;d3d11,dxgi={(DxvkSettings.Enabled ? "n,b" : "b")}";
-        if (!String.IsNullOrWhiteSpace(Settings.WineDLLOverrides))
-            wineOverrides += (";" + Settings.WineDLLOverrides);
-        psi.Environment.Add("WINEDLLOVERRIDES", wineOverrides);
-        psi.Arguments = runinprefix ? Settings.RunInPrefix + command : Settings.Run + command;
+        psi.Environment.Add("WINEDLLOVERRIDES", Wine.GetWineDLLOverrides(Dxvk.Enabled));
+        
+        psi.Arguments = runinprefix ? Wine.RunInPrefix + command : Wine.Run + command;
         var quickRun = new Process();
         quickRun.StartInfo = psi;
         quickRun.Start();
@@ -361,8 +249,8 @@ public class CompatibilityTools
 
     public Process RunInPrefix(string command, string workingDirectory = "", IDictionary<string, string> environment = null, bool redirectOutput = false, bool writeLog = false, bool wineD3D = false)
     {
-        var psi = new ProcessStartInfo(Settings.Runner);
-        psi.Arguments = Settings.RunInRuntime + Settings.RunInPrefix + command;
+        var psi = new ProcessStartInfo(Wine.Runner);
+        psi.Arguments = Wine.RunInRuntime + Wine.RunInPrefix + command;
 
         Log.Verbose("Running in prefix: {FileName} {Arguments}", psi.FileName, psi.Arguments);
         return RunInPrefix(psi, workingDirectory, environment, redirectOutput, writeLog, wineD3D);
@@ -370,12 +258,12 @@ public class CompatibilityTools
 
     public Process RunInPrefix(string[] args, string workingDirectory = "", IDictionary<string, string> environment = null, bool redirectOutput = false, bool writeLog = false, bool wineD3D = false)
     {
-        var psi = new ProcessStartInfo(Settings.Runner);
-        if (Settings.IsRuntime)
-            foreach (var arg in Settings.RunInRuntimeArray)
+        var psi = new ProcessStartInfo(Wine.Runner);
+        if (Wine.IsRuntime)
+            foreach (var arg in Wine.RunInRuntimeArray)
                 psi.ArgumentList.Add(arg);
-        if (Settings.IsProton)
-            psi.ArgumentList.Add(Settings.RunInPrefix.Trim());
+        if (Wine.IsProton)
+            psi.ArgumentList.Add(Wine.RunInPrefix.Trim());
         foreach (var arg in args)
             psi.ArgumentList.Add(arg);
 
@@ -409,15 +297,6 @@ public class CompatibilityTools
         return (a.Trim(':') + ":" + b.Trim(':')).Trim(':');
     }
 
-    public void AddEnvironmentVar(string key, string value)
-    {
-        extraEnvironmentVars.Add(key, value);
-    }
-
-    public void AddEnvironmentVars(IDictionary<string, string> env)
-    {
-        MergeDictionaries(extraEnvironmentVars, env);
-    }
 
     private Process RunInPrefix(ProcessStartInfo psi, string workingDirectory, IDictionary<string, string> environment, bool redirectOutput, bool writeLog, bool wineD3D)
     {
@@ -426,12 +305,10 @@ public class CompatibilityTools
         psi.UseShellExecute = false;
         psi.WorkingDirectory = workingDirectory;
 
-        wineD3D = !DxvkSettings.Enabled || wineD3D;
-
         var wineEnvironmentVariables = new Dictionary<string, string>();
-        if (Settings.IsRuntime)
+        if (Wine.IsRuntime)
         {
-            var importantPaths = new System.Text.StringBuilder(GamePath.FullName + ":" + GameConfigPath.FullName);
+            var importantPaths = new System.Text.StringBuilder(Game.GameFolder.FullName + ":" + Game.ConfigFolder.FullName);
             var steamCompatMounts = System.Environment.GetEnvironmentVariable("STEAM_COMPAT_MOUNTS");
             if (!string.IsNullOrEmpty(steamCompatMounts))
                 importantPaths.Append(":" + steamCompatMounts.Trim(':'));
@@ -457,59 +334,52 @@ public class CompatibilityTools
             wineEnvironmentVariables.Add("STEAM_COMPAT_MOUNTS", importantPaths.ToString());
         }
         
-        if (Settings.IsProton)
+        if (Wine.IsProton)
         {
             // Need to set these or proton will refuse to run.
-            wineEnvironmentVariables.Add("STEAM_COMPAT_DATA_PATH", Settings.Prefix.FullName);
+            wineEnvironmentVariables.Add("STEAM_COMPAT_DATA_PATH", Wine.Prefix.FullName);
             wineEnvironmentVariables.Add("STEAM_COMPAT_CLIENT_INSTALL_PATH", compatToolsDirectory.Parent.FullName);
-            if (!Settings.FsyncOn)
+            if (!Wine.FsyncOn)
             {
                 wineEnvironmentVariables.Add("PROTON_NO_FSYNC", "1");
-                if (!Settings.EsyncOn)
+                if (!Wine.EsyncOn)
                     wineEnvironmentVariables.Add("PROTON_NO_ESYNC", "1");
             }
-            if (wineD3D)
+            if (!Dxvk.Enabled || wineD3D)
                 wineEnvironmentVariables.Add("PROTON_USE_WINED3D", "1");
         }
         
-        if (!Settings.IsProton)
+        if (!Wine.IsProton)
         {
-            wineEnvironmentVariables.Add("WINEESYNC", Settings.EsyncOn ? "1" : "0");
-            wineEnvironmentVariables.Add("WINEFSYNC", Settings.FsyncOn ? "1" : "0");
-            wineEnvironmentVariables.Add("WINEPREFIX", Settings.Prefix.FullName);
+            wineEnvironmentVariables.Add("WINEESYNC", Wine.EsyncOn ? "1" : "0");
+            wineEnvironmentVariables.Add("WINEFSYNC", Wine.FsyncOn ? "1" : "0");
+            wineEnvironmentVariables.Add("WINEPREFIX", Wine.Prefix.FullName);
         }
 
-        var wineOverrides = $"msquic=,mscoree=n,b;d3d11,dxgi={(wineD3D ? "b" : "n,b")}";
-        if (!String.IsNullOrWhiteSpace(Settings.WineDLLOverrides))
-            wineOverrides += (";" + Settings.WineDLLOverrides);
-        wineEnvironmentVariables.Add("WINEDLLOVERRIDES", wineOverrides);
+        wineEnvironmentVariables.Add("WINEDLLOVERRIDES", Wine.GetWineDLLOverrides(Dxvk.Enabled && !wineD3D));
+        Console.WriteLine("WINEDLLOVERRIDES=" + Wine.GetWineDLLOverrides(Dxvk.Enabled && !wineD3D));
 
-        if (!string.IsNullOrEmpty(Settings.DebugVars))
+        if (!string.IsNullOrEmpty(Wine.DebugVars))
         {
-            wineEnvironmentVariables.Add("WINEDEBUG", Settings.DebugVars);
+            wineEnvironmentVariables.Add("WINEDEBUG", Wine.DebugVars);
         }
 
         wineEnvironmentVariables.Add("XL_WINEONLINUX", "true");
 
-        if (this.gamemodeOn)
+        if (Game.GameModeEnabled)
             wineEnvironmentVariables.Add("LD_PRELOAD", MergeLDPreload("libgamemodeauto.so.0" , Environment.GetEnvironmentVariable("LD_PRELOAD")));
 
-        foreach (var dxvkVar in DxvkSettings.Environment)
-        {
-            // Don't add DXVK_ENABLE_NVAPI to the environment. Let Proton handle it.
-            if (dxvkVar.Key == "DXVK_ENABLE_NVAPI" && Settings.IsProton)
-                continue;
-            wineEnvironmentVariables.Add(dxvkVar.Key, dxvkVar.Value);
-        }
         MergeDictionaries(psi.Environment, wineEnvironmentVariables);
-        MergeDictionaries(psi.Environment, extraEnvironmentVars);       // Allow extraEnvironmentVars to override what we set here.
+        MergeDictionaries(psi.Environment, Dxvk.Environment);
+        MergeDictionaries(psi.Environment, DLSS.Environment);
+        MergeDictionaries(psi.Environment, Game.Environment);       // Allow extra environment vars to override everything else.
         MergeDictionaries(psi.Environment, environment);
 
 #if FLATPAK_NOTRIGHTNOW
         psi.FileName = "flatpak-spawn";
 
         psi.ArgumentList.Insert(0, "--host");
-        psi.ArgumentList.Insert(1, Settings.WinePath);
+        psi.ArgumentList.Insert(1, Wine.WinePath);
 
         foreach (KeyValuePair<string, string> envVar in wineEnvironmentVariables)
         {
@@ -638,11 +508,11 @@ public class CompatibilityTools
 
     public void Kill()
     {
-        var psi = new ProcessStartInfo(Settings.WineServerPath)
+        var psi = new ProcessStartInfo(Wine.WineServerPath)
         {
             Arguments = "-k"
         };
-        psi.EnvironmentVariables.Add("WINEPREFIX", Settings.Prefix.FullName);
+        psi.EnvironmentVariables.Add("WINEPREFIX", Wine.Prefix.FullName);
 
         Process.Start(psi);
     }
