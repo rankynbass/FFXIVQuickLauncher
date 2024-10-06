@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using System.Linq;
@@ -50,9 +51,6 @@ public class DxvkSettings
 
     private void SetupEnvironment(bool? async, bool? gplasync, int maxFrameRate, bool dxvkHudEnabled, string dxvkHudString, bool mangoHudEnabled, bool mangoHudCustomIsFile, string customMangoHud)
     {
-        // Fix for Wine > 9.17
-        Environment.Add("DXVK_CONFIG", "dxgi.deferSurfaceCreation = True");
-
         if (maxFrameRate != 0)
             Environment.Add("DXVK_FRAME_RATE", (maxFrameRate).ToString());
         
@@ -120,9 +118,9 @@ public class DxvkSettings
 
     internal async Task Install(DirectoryInfo dxvkDirectory, DirectoryInfo prefix)
     {
-        if (string.IsNullOrEmpty(FolderName) || string.IsNullOrEmpty(DownloadUrl))
+        if (string.IsNullOrEmpty(FolderName))
         {
-            Log.Error($"Invalid Dxvk information - Dxvk Folder = \"{FolderName}\", Download Url = \"{DownloadUrl}\"");
+            Log.Error($"Invalid Dxvk Folder (folder name is empty)");
             return;
         }
         

@@ -53,9 +53,9 @@ public class DLSSSettings
 
     internal async Task Install(DirectoryInfo dxvkDirectory, DirectoryInfo prefix)
     {
-        if (string.IsNullOrEmpty(FolderName) || string.IsNullOrEmpty(DownloadUrl))
+        if (string.IsNullOrEmpty(FolderName))
         {
-            Log.Error($"Invalid Nvapi information - Nvapi Folder = \"{FolderName}\", Download Url = \"{DownloadUrl}\"");
+            Log.Error($"Invalid Nvapi Folder (folder name is empty)");
             return;
         }
 
@@ -95,18 +95,15 @@ public class DLSSSettings
         // If NvngxOverride is set, assume the files/symlinks are already there. For Nix compatibility, mostly.
         if (string.IsNullOrEmpty(NvidiaWineFolder))
         {
-            System.Console.WriteLine("Nvidia Wine Folder variable is empty!");
             return;
         }
         if (!Directory.Exists(NvidiaWineFolder))
         {
-            System.Console.WriteLine($"Nvidia Wine Folder does not exist: {NvidiaWineFolder}");
             return;
         }
 
         if (NvidiaFiles.Count == 0)
         {
-            System.Console.WriteLine("No Nvidia files selected for linking...");
             return;
         }
 

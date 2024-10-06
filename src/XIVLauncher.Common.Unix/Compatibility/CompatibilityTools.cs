@@ -69,7 +69,6 @@ public class CompatibilityTools
             Wine.Prefix.Create();
             if (Wine.IsProton)
                 File.CreateSymbolicLink(Path.Combine(Wine.Prefix.FullName, "pfx"), Wine.Prefix.FullName);
-
         }
         else
         {
@@ -116,23 +115,17 @@ public class CompatibilityTools
         }
         EnsurePrefix();
         
-        Console.WriteLine($"Dxvk.Enabled={Dxvk.Enabled}");
-        Console.WriteLine($"DLSS.Enabled={DLSS.Enabled}");
-        Console.WriteLine($"DLSS.NoOverwrite={DLSS.NoOverwrite}");
         // Download and install DXVK if enabled
         if (Dxvk.Enabled)
         {
-            Console.WriteLine("Installing Dxvk...");
             await Dxvk.Install(dxvkDirectory, Wine.Prefix).ConfigureAwait(false);
         }
         if (DLSS.Enabled)
         {
             if (!DLSS.NoOverwrite)
             {
-                Console.WriteLine($"Installing Nvidia Files to {Game.GameFolder.FullName}");
                 DLSS.InstallNvidaFiles(Game.GameFolder);
             }
-            Console.WriteLine("Installing Nvapi");
             await DLSS.Install(dxvkDirectory, Wine.Prefix).ConfigureAwait(false);
         }
 
@@ -168,6 +161,8 @@ public class CompatibilityTools
 
     internal static async Task DownloadTool(DirectoryInfo installDirectory, string downloadUrl)
     {
+        if (string.IsNullOrEmpty(downloadUrl))
+            throw new ArgumentException("Empty or null string passed as url.");
         using var client = new HttpClient();
         var tempPath = Path.GetTempFileName();
 
@@ -357,7 +352,6 @@ public class CompatibilityTools
         }
 
         wineEnvironmentVariables.Add("WINEDLLOVERRIDES", Wine.GetWineDLLOverrides(Dxvk.Enabled && !wineD3D));
-        Console.WriteLine("WINEDLLOVERRIDES=" + Wine.GetWineDLLOverrides(Dxvk.Enabled && !wineD3D));
 
         if (!string.IsNullOrEmpty(Wine.DebugVars))
         {
