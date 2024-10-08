@@ -46,17 +46,17 @@ Proton has built-in commands for doing unix->windows path converions. We don't u
 uses 32-bit wine when we can't assume 32-bit support will be available (for example in flatpak releases).
 */
 
-public class WineSettings
+public class RunnerSettings
 {
     public bool IsProton { get; private set; }
 
-    public bool IsRuntime => !string.IsNullOrEmpty(RuntimePath);
+    public bool IsUsingRuntime => !string.IsNullOrEmpty(RuntimePath);
 
     public string WineServerPath { get; private set; }
 
-    public string WinePath { get; private set; }
+    public string RunnerPath { get; private set; }
 
-    private string BinPath;
+    private string ParentPath;
 
     public string DownloadUrl;
 
@@ -78,23 +78,23 @@ public class WineSettings
 
     private const string WINEDLLOVERRIDES = "msquic=,mscoree=n,b;d3d9,d3d10core,d3d11,dxgi=";
 
-    // Runner will be the steam linux runtime if used, or wine/proton if not used.
-    public string Runner => string.IsNullOrEmpty(RuntimePath) ? WinePath : RuntimePath;
+    // Command will be the steam linux runtime if used, or wine/proton if not used.
+    public string Command => string.IsNullOrEmpty(RuntimePath) ? RunnerPath : RuntimePath;
 
     // Run and RunInPrefix will be set to the appropriate values if using proton (with or without container), or "" if using wine.
-    public string Run => IsProton ? "run " : "";
+    public string RunVerb => IsProton ? "run " : "";
 
-    public string RunInPrefix => IsProton ? "runinprefix " : "";
+    public string RunInPrefixVerb => IsProton ? "runinprefix " : "";
 
-    // RunInRuntime and RunInRuntimeArray will be used if we're using a container. Otherwise set to "".
-    public string RunInRuntime => IsRuntime ? $"--verb=waitforexitandrun -- \"{WinePath}\" " : "";
+    // RunInRuntimeArguments and RunInRuntimeArgumentsArray will be used if we're using a container. Otherwise set to "".
+    public string RunInRuntimeArguments => IsUsingRuntime ? $"--verb=waitforexitandrun -- \"{RunnerPath}\" " : "";
 
-    public string[] RunInRuntimeArray => IsRuntime ? new string[] {"--verb=waitforexitandrun", "--", WinePath} : new string[] { };
+    public string[] RunInRuntimeArgumentsArray => IsUsingRuntime ? new string[] {"--verb=waitforexitandrun", "--", RunnerPath} : new string[] { };
 
     /*  
         The end result of the above variables is that we will build the process commands as follows:
-        Process: Runner
-        Arguements: RunInRuntime + WinePath + Run/RunInPrefix + command.
+        Process: Command
+        Arguements: RunInRuntimeArguments + RunnerPath + Run/RunInPrefix + command.
 
         If wine, that'll look like: /path/to/wine64 command
         If proton, it'll look like: /path/to/proton runinprefix command
@@ -102,16 +102,16 @@ public class WineSettings
     */
 
     // Constructor for Wine
-    public WineSettings(string wineFolder, string downloadUrl, string extraOverrides, string debugVars, FileInfo logFile, DirectoryInfo prefix, bool? esyncOn, bool? fsyncOn)
+    public RunnerSettings(string runnerPath, string downloadUrl, string extraOverrides, string debugVars, FileInfo logFile, DirectoryInfo prefix, bool? esyncOn, bool? fsyncOn)
     {
         IsProton = false;
-        BinPath = WineCheck(wineFolder);
-        WinePath = File.Exists(Path.Combine(BinPath, "wine64")) ? Path.Combine(BinPath, "wine64") : Path.Combine(BinPath, "wine");
-        WineServerPath = Path.Combine(BinPath, "wineserver");
+        ParentPath = WineCheck(runnerPath);
+        RunnerPath = File.Exists(Path.Combine(ParentPath, "wine64")) ? Path.Combine(ParentPath, "wine64") : Path.Combine(ParentPath, "wine");
+        WineServerPath = Path.Combine(ParentPath, "wineserver");
         DownloadUrl = downloadUrl;
         RuntimePath = "";
         RuntimeUrl = "";
-        ExtraOverrides = WineDLLOverrideIsValid(extraOverrides) ? ";" + extraOverrides : "";
+        ExtraOverrides = WINEDLLOVERRIDEIsValid(extraOverrides) ? ";" + extraOverrides : "";
         EsyncOn = esyncOn ?? false;
         FsyncOn = fsyncOn ?? false;
         DebugVars = debugVars;
@@ -120,16 +120,16 @@ public class WineSettings
     }
 
     // Constructor for Proton
-    public WineSettings(string wineFolder, string downloadUrl, string runtimePath, string runtimeUrl, string extraOverrides, string debugVars, FileInfo logFile, DirectoryInfo prefix, bool? esyncOn, bool? fsyncOn)
+    public RunnerSettings(string runnerPath, string downloadUrl, string runtimePath, string runtimeUrl, string extraOverrides, string debugVars, FileInfo logFile, DirectoryInfo prefix, bool? esyncOn, bool? fsyncOn)
     {
         IsProton = true;
-        BinPath = wineFolder;
-        WinePath = Path.Combine(BinPath, "proton");
-        WineServerPath = Path.Combine(BinPath, "files", "bin", "wineserver");
+        ParentPath = runnerPath;
+        RunnerPath = Path.Combine(ParentPath, "proton");
+        WineServerPath = Path.Combine(ParentPath, "files", "bin", "wineserver");
         DownloadUrl = downloadUrl;
         RuntimePath = string.IsNullOrEmpty(runtimePath) ? "" : Path.Combine(runtimePath, "_v2-entry-point");
         RuntimeUrl = runtimeUrl;       
-        ExtraOverrides = WineDLLOverrideIsValid(extraOverrides) ? ";" + extraOverrides : "";
+        ExtraOverrides = WINEDLLOVERRIDEIsValid(extraOverrides) ? ";" + extraOverrides : "";
         EsyncOn = esyncOn ?? false;
         FsyncOn = fsyncOn ?? false;
         DebugVars = debugVars;
@@ -150,7 +150,7 @@ public class WineSettings
         return Path.Combine(directory.FullName, "bin");            
     }
 
-    public static bool WineDLLOverrideIsValid(string dlls)
+    public static bool WINEDLLOVERRIDEIsValid(string dlls)
     {
         string[] invalid = { "msquic", "mscoree", "d3d9", "d3d11", "d3d10core", "dxgi" };
         var format = @"^(?:(?:[a-zA-Z0-9_\-\.]+,?)+=(?:n,b|b,n|n|b|d|,|);?)+$";
