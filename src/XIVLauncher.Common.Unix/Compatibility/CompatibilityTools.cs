@@ -87,7 +87,7 @@ public class CompatibilityTools
             if (string.IsNullOrEmpty(Runner.RuntimeUrl))
                 throw new FileNotFoundException($"Steam runtime selected, but is not present, and no download url provided.");
             Log.Information($"Steam Linux Runtime does not exist, downloading {Runner.RuntimeUrl}");
-            await DownloadTool(commonDirectory, Runner.RuntimeUrl).ConfigureAwait(false);
+            await DownloadRuntime().ConfigureAwait(false);
         }
 
         // Download Proton if it's missing, ensure the proton prefix, and return.
@@ -98,7 +98,7 @@ public class CompatibilityTools
                 if (string.IsNullOrEmpty(Runner.DownloadUrl))
                     throw new FileNotFoundException($"Proton not found at the given path; {Runner.RunnerPath}, and no download url provided.");
                 Log.Information($"Compatibility tool (Proton) does not exist. Downloading {Runner.DownloadUrl} to {compatToolsDirectory.FullName}");
-                await DownloadTool(compatToolsDirectory, Runner.DownloadUrl).ConfigureAwait(false);
+                await DownloadProton().ConfigureAwait(false);
             }
             EnsurePrefix();
             IsToolReady = true;
@@ -111,7 +111,7 @@ public class CompatibilityTools
             if (string.IsNullOrEmpty(Runner.DownloadUrl))
                 throw new FileNotFoundException($"Wine not found at the given path: {Runner.RunnerPath}, and no download url provided.");
             Log.Information($"Compatibility tool (Wine) does not exist, downloading {Runner.DownloadUrl} to {wineDirectory.FullName}");
-            await DownloadTool(wineDirectory, Runner.DownloadUrl).ConfigureAwait(false);
+            await DownloadWine().ConfigureAwait(false);
         }
         EnsurePrefix();
         

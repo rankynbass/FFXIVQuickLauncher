@@ -19,6 +19,7 @@ public class DLSSSettings
 
     public string NvidiaWineFolder { get; }
 
+    // May use this in the future for the FSR2 mod
     public List<string> NvidiaFiles { get; }
 
     public Dictionary<string, string> Environment { get; }
@@ -92,17 +93,8 @@ public class DLSSSettings
     internal void InstallNvidaFiles(DirectoryInfo gamePath)
     {
         // Create symlinks to nvngx.dll and _nvngx.dll in the GamePath/game folder. For some reason it doesn't work if you put them in system32.
-        // If NvngxOverride is set, assume the files/symlinks are already there. For Nix compatibility, mostly.
-        if (string.IsNullOrEmpty(NvidiaWineFolder))
-        {
-            return;
-        }
-        if (!Directory.Exists(NvidiaWineFolder))
-        {
-            return;
-        }
-
-        if (NvidiaFiles.Count == 0)
+        // If NoOverwrite is set, assume the files/symlinks are already there. For Nix compatibility and to prevent FSR2 mod from being overwritten.
+        if (string.IsNullOrEmpty(NvidiaWineFolder) || !Directory.Exists(NvidiaWineFolder) || NvidiaFiles.Count == 0 || NoOverwrite)
         {
             return;
         }
