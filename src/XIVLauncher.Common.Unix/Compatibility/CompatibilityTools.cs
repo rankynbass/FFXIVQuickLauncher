@@ -44,6 +44,12 @@ public class CompatibilityTools
         this.Runner = runnerSettings;
         this.Dxvk = dxvkSettings;
         this.DLSS = dlssSettings;
+        if (Runner.IsProton)
+        {
+            Runner.SetWineD3D(Dxvk.Enabled);
+            Runner.SetSteamFolder(Game.SteamFolder.FullName);
+            Runner.SetSteamCompatMounts(Game.GameFolder.FullName, Game.ConfigFolder.FullName);
+        }
 
         this.wineDirectory = new DirectoryInfo(Path.Combine(Game.ToolsFolder.FullName, "wine"));
         this.dxvkDirectory = new DirectoryInfo(Path.Combine(Game.ToolsFolder.FullName, "dxvk"));
@@ -118,15 +124,15 @@ public class CompatibilityTools
         // Download and install DXVK if enabled
         if (Dxvk.Enabled)
         {
-            await Dxvk.Install(dxvkDirectory, Runner.Prefix).ConfigureAwait(false);
+            await InstallToPrefix(dxvkDirectory, Dxvk.FolderName, Dxvk.DownloadUrl, "DXVK").ConfigureAwait(false);
         }
         if (DLSS.Enabled)
         {
-            if (!DLSS.NoOverwrite)
+            if (!DLSS.NoOverwrite && Directory.Exists(DLSS.NvidiaWineFolder))
             {
-                DLSS.InstallNvidaFiles(Game.GameFolder);
+                InstallToGameFolder(DLSS.NvidiaWineFolder, new List<string>{"nvngx.dll", "_nvngx.dll"});
             }
-            await DLSS.Install(dxvkDirectory, Runner.Prefix).ConfigureAwait(false);
+            await InstallToPrefix(dxvkDirectory, DLSS.FolderName, DLSS.DownloadUrl, "DXVK-Nvapi").ConfigureAwait(false);
         }
 
         IsToolReady = true;
@@ -172,6 +178,81 @@ public class CompatibilityTools
         File.Delete(tempPath);
     }
 
+    internal async Task InstallToPrefix(DirectoryInfo toolfolder, string folder, string url, string tool)
+    {
+        if (string.IsNullOrEmpty(folder))
+        {
+            Log.Error($"Invalid {tool} Folder (folder name is empty)");
+            return;
+        }
+        
+        var toolPath = Path.Combine(toolfolder.FullName, folder, "x64");
+        if (!Directory.Exists(toolPath))
+        {
+            Log.Information($"{tool} does not exist, downloading {url}");
+            await CompatibilityTools.DownloadTool(toolfolder, url).ConfigureAwait(false);
+        }
+
+        var system32 = Path.Combine(Runner.Prefix.FullName, "drive_c", "windows", "system32");
+        var files = Directory.GetFiles(toolPath);
+
+        foreach (string fileName in files)
+        {
+            File.Copy(fileName, Path.Combine(system32, Path.GetFileName(fileName)), true);
+        }
+
+        // 32-bit files. Probably not needed anymore, but may be useful for running other programs in prefix.
+        var dxvkPath32 = Path.Combine(toolfolder.FullName, folder, "x32");
+        var syswow64 = Path.Combine(Runner.Prefix.FullName, "drive_c", "windows", "syswow64");
+
+        if (Directory.Exists(dxvkPath32))
+        {
+            files = Directory.GetFiles(dxvkPath32);
+
+            foreach (string fileName in files)
+            {
+                File.Copy(fileName, Path.Combine(syswow64, Path.GetFileName(fileName)), true);
+            }
+        }
+    }
+
+    internal void InstallToGameFolder(string sourceFolder, List<string> files)
+    {
+        // Create symlinks to nvngx.dll and _nvngx.dll in the GamePath/game folder. For some reason it doesn't work if you put them in system32.
+        // If NoOverwrite is set, assume the files/symlinks are already there. For Nix compatibility and to prevent FSR2 mod from being overwritten.
+
+
+        foreach (var target in files)
+        {
+            var source = new FileInfo(Path.Combine(sourceFolder, target));
+            var destination = new FileInfo(Path.Combine(Game.GameFolder.FullName, "game", target));
+            if (source.Exists)
+            {
+                if (!destination.Exists) // No file, create link.
+                {
+                    destination.CreateAsSymbolicLink(source.FullName);
+                    Log.Verbose($"Making symbolic link at {destination.FullName} to {source.FullName}");
+                }
+                else if (destination.ResolveLinkTarget(false) is null) // File exists, is not a symlink. Delete and create link.
+                {
+                    destination.Delete();
+                    destination.CreateAsSymbolicLink(source.FullName);
+                    Log.Verbose($"Replacing file at {destination.FullName} with symbolic link to {source.FullName}");
+                }
+                else if (destination.ResolveLinkTarget(true).FullName != source.FullName) // Link exists, but does not point to source. Replace.
+                {
+                    destination.Delete();
+                    destination.CreateAsSymbolicLink(source.FullName);
+                    Log.Verbose($"Symbolic link at {destination.FullName} incorrectly links to {destination.ResolveLinkTarget(true).FullName}. Replacing with link to {source.FullName}");
+                }
+                else
+                    Log.Verbose($"Symbolic link at {destination.FullName} to {source.FullName} is correct.");
+            }
+            else
+                Log.Error($"Missing file {target}! Cannot symlink from {source} to {destination}.");
+        }
+    }
+
     private void ResetPrefix()
     {
         Runner.Prefix.Refresh();
@@ -213,18 +294,8 @@ public class CompatibilityTools
         psi.RedirectStandardError = true;
         psi.UseShellExecute = false;
         // Need to set these or proton will refuse to run.
-        psi.Environment.Add("STEAM_COMPAT_DATA_PATH", Runner.Prefix.FullName);
-        psi.Environment.Add("STEAM_COMPAT_CLIENT_INSTALL_PATH", compatToolsDirectory.Parent.FullName);
-        // Need to properly set esync/fsync or it can sometimes cause problems with the wineserver.
-        if (!Runner.FsyncOn)
-        {
-            psi.Environment.Add("PROTON_NO_FSYNC", "1");
-            if (!Runner.EsyncOn)
-                psi.Environment.Add("PROTON_NO_ESYNC", "1");
-        }
-        if (!Dxvk.Enabled)
-            psi.Environment.Add("PROTON_USE_WINED3D", "1");
-
+        foreach (var kvp in Runner.Environment)
+            psi.Environment.Add(kvp);
         psi.Environment.Add("WINEDLLOVERRIDES", Runner.GetWineDLLOverrides(Dxvk.Enabled));
         
         psi.Arguments = runinprefix ? Runner.RunInPrefixVerb + command : Runner.RunVerb + command;
@@ -299,71 +370,15 @@ public class CompatibilityTools
         psi.RedirectStandardError = writeLog;
         psi.UseShellExecute = false;
         psi.WorkingDirectory = workingDirectory;
-
-        var wineEnvironmentVariables = new Dictionary<string, string>();
-        if (Runner.IsUsingRuntime)
-        {
-            var importantPaths = new System.Text.StringBuilder(Game.GameFolder.FullName + ":" + Game.ConfigFolder.FullName);
-            var steamCompatMounts = System.Environment.GetEnvironmentVariable("STEAM_COMPAT_MOUNTS");
-            if (!string.IsNullOrEmpty(steamCompatMounts))
-                importantPaths.Append(":" + steamCompatMounts.Trim(':'));
-            
-            // These paths are for winediscordipcbridge.exe. Note that exact files are being passed, not directories.
-            // You can't pass the whole /run/user/<userid> directory; it will get ignored.
-            var runtimeDir = System.Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR");
-            if (string.IsNullOrEmpty(runtimeDir))
-            {
-                var id = new ProcessStartInfo("id");
-                id.RedirectStandardOutput = true;
-                id.UseShellExecute = false;
-                id.Arguments = "-u";
-                var getUID = new Process();
-                getUID.StartInfo = id;
-                getUID.Start();
-                runtimeDir = "/run/user/" + getUID.StandardOutput.ReadToEnd().Trim();
-            }
-            for (int i = 0; i < 10; i++)
-                importantPaths.Append($":{runtimeDir}/discord-ipc-{i}");
-            importantPaths.Append($"{runtimeDir}/app/com.discordapp.Discord:{runtimeDir}/snap.discord-canary");
-            
-            wineEnvironmentVariables.Add("STEAM_COMPAT_MOUNTS", importantPaths.ToString());
-        }
-        
-        if (Runner.IsProton)
-        {
-            // Need to set these or proton will refuse to run.
-            wineEnvironmentVariables.Add("STEAM_COMPAT_DATA_PATH", Runner.Prefix.FullName);
-            wineEnvironmentVariables.Add("STEAM_COMPAT_CLIENT_INSTALL_PATH", compatToolsDirectory.Parent.FullName);
-            if (!Runner.FsyncOn)
-            {
-                wineEnvironmentVariables.Add("PROTON_NO_FSYNC", "1");
-                if (!Runner.EsyncOn)
-                    wineEnvironmentVariables.Add("PROTON_NO_ESYNC", "1");
-            }
-            if (!Dxvk.Enabled || wineD3D)
-                wineEnvironmentVariables.Add("PROTON_USE_WINED3D", "1");
-        }
-        
-        if (!Runner.IsProton)
-        {
-            wineEnvironmentVariables.Add("WINEESYNC", Runner.EsyncOn ? "1" : "0");
-            wineEnvironmentVariables.Add("WINEFSYNC", Runner.FsyncOn ? "1" : "0");
-            wineEnvironmentVariables.Add("WINEPREFIX", Runner.Prefix.FullName);
-        }
-
-        wineEnvironmentVariables.Add("WINEDLLOVERRIDES", Runner.GetWineDLLOverrides(Dxvk.Enabled && !wineD3D));
-
-        if (!string.IsNullOrEmpty(Runner.DebugVars))
-        {
-            wineEnvironmentVariables.Add("WINEDEBUG", Runner.DebugVars);
-        }
-
-        wineEnvironmentVariables.Add("XL_WINEONLINUX", "true");
+      
+        psi.Environment.Add("WINEDLLOVERRIDES", Runner.GetWineDLLOverrides(Dxvk.Enabled && !wineD3D));
+        if (Dxvk.Enabled && wineD3D)
+            psi.Environment.Add("PROTON_USE_WINED3D", "1");
 
         if (Game.GameModeEnabled)
-            wineEnvironmentVariables.Add("LD_PRELOAD", MergeLDPreload("libgamemodeauto.so.0" , Environment.GetEnvironmentVariable("LD_PRELOAD")));
+            psi.Environment.Add("LD_PRELOAD", MergeLDPreload("libgamemodeauto.so.0" , Environment.GetEnvironmentVariable("LD_PRELOAD")));
 
-        MergeDictionaries(psi.Environment, wineEnvironmentVariables);
+        MergeDictionaries(psi.Environment, Runner.Environment);
         MergeDictionaries(psi.Environment, Dxvk.Environment);
         MergeDictionaries(psi.Environment, DLSS.Environment);
         MergeDictionaries(psi.Environment, Game.Environment);       // Allow extra environment vars to override everything else.

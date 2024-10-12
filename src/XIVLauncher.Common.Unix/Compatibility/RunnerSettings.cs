@@ -1,6 +1,7 @@
 ﻿using System.IO;
 using System.Text.RegularExpressions;
 using System.Linq;
+using System.Collections.Generic;
 
 namespace XIVLauncher.Common.Unix.Compatibility;
 
@@ -101,6 +102,10 @@ public class RunnerSettings
         If steam runtime, it'll be: /path/to/runtime --verb=waitforexitandrun -- /path/to/proton runinprefix command
     */
 
+    public Dictionary<string, string> Environment { get; private set; }
+
+    internal string SteamCompatMounts { get; private set; }
+
     // Constructor for Wine
     public RunnerSettings(string runnerPath, string downloadUrl, string extraOverrides, string debugVars, FileInfo logFile, DirectoryInfo prefix, bool? esyncOn, bool? fsyncOn)
     {
@@ -116,7 +121,18 @@ public class RunnerSettings
         FsyncOn = fsyncOn ?? false;
         DebugVars = debugVars;
         LogFile = logFile;
-        Prefix = prefix;       
+        Prefix = prefix;
+        Environment = new Dictionary<string, string>
+        {
+            {"WINEESYNC", EsyncOn ? "1" : "0"},
+            {"WINEFSYNC", FsyncOn ? "1" : "0"},
+            {"WINEPREFIX", Prefix.FullName},
+            {"XL_WINEONLINUX", "true"}
+        };
+        if (!string.IsNullOrEmpty(DebugVars))
+        {
+            Environment.Add("WINEDEBUG", DebugVars);
+        }
     }
 
     // Constructor for Proton
@@ -135,6 +151,56 @@ public class RunnerSettings
         DebugVars = debugVars;
         LogFile = logFile;
         Prefix = prefix;
+
+        Environment = new Dictionary<string, string>
+        {
+            {"STEAM_COMPAT_DATA_PATH", Prefix.FullName},
+            {"XL_WINEONLINUX", "true"}
+        };
+        if (!FsyncOn)
+        {
+            Environment.Add("PROTON_NO_FSYNC", "1");
+            if (!EsyncOn)
+                Environment.Add("PROTON_NO_ESYNC", "1");
+        }
+        if (!string.IsNullOrEmpty(DebugVars))
+        {
+            Environment.Add("WINEDEBUG", DebugVars);
+        }
+    }
+
+    internal void SetWineD3D(bool dxvkEnabled)
+    {
+        if (!dxvkEnabled)
+            Environment.Add("PROTON_USE_WINED3D", "1");
+    }
+
+    internal void SetSteamFolder(string steamFolder)
+    {
+        Environment.Add("STEAM_COMPAT_CLIENT_INSTALL_PATH", steamFolder);
+    }
+
+    internal void SetSteamCompatMounts(string gamefolder, string configfolder)
+    {
+        var importantPaths = new System.Text.StringBuilder($"{gamefolder}:{configfolder}");
+        var steamCompatMounts = System.Environment.GetEnvironmentVariable("STEAM_COMPAT_MOUNTS");
+        if (!string.IsNullOrEmpty(steamCompatMounts))
+            importantPaths.Append(":" + steamCompatMounts.Trim(':'));
+        
+        // These paths are for winediscordipcbridge.exe. Note that exact files are being passed, not directories.
+        // You can't pass the whole /run/user/<userid> directory; it will get ignored.
+        var runtimeDir = System.Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR");
+        if (string.IsNullOrEmpty(runtimeDir))
+        {
+            // If XDG_RUNTIME_DIR isn't set, discord ipc won't work, so there's no point in continuing.
+            SteamCompatMounts = importantPaths.ToString();
+            return;
+        }
+        for (int i = 0; i < 10; i++)
+            importantPaths.Append($":{runtimeDir}/discord-ipc-{i}");
+        importantPaths.Append($"{runtimeDir}/app/com.discordapp.Discord:{runtimeDir}/snap.discord-canary");
+        
+        Environment.Add("STEAM_COMPAT_MOUNTS", importantPaths.ToString());
     }
 
     internal string GetWineDLLOverrides(bool dxvk)

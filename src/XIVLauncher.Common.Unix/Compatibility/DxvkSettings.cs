@@ -115,42 +115,4 @@ public class DxvkSettings
             return true;
         return false;
     }
-
-    internal async Task Install(DirectoryInfo dxvkDirectory, DirectoryInfo prefix)
-    {
-        if (string.IsNullOrEmpty(FolderName))
-        {
-            Log.Error($"Invalid Dxvk Folder (folder name is empty)");
-            return;
-        }
-        
-        var dxvkPath = Path.Combine(dxvkDirectory.FullName, FolderName, "x64");
-        if (!Directory.Exists(dxvkPath))
-        {
-            Log.Information($"DXVK does not exist, downloading {DownloadUrl}");
-            await CompatibilityTools.DownloadTool(dxvkDirectory, DownloadUrl).ConfigureAwait(false);
-        }
-
-        var system32 = Path.Combine(prefix.FullName, "drive_c", "windows", "system32");
-        var files = Directory.GetFiles(dxvkPath);
-
-        foreach (string fileName in files)
-        {
-            File.Copy(fileName, Path.Combine(system32, Path.GetFileName(fileName)), true);
-        }
-
-        // 32-bit files. Probably not needed anymore, but may be useful for running other programs in prefix.
-        var dxvkPath32 = Path.Combine(dxvkDirectory.FullName, FolderName, "x32");
-        var syswow64 = Path.Combine(prefix.FullName, "drive_c", "windows", "syswow64");
-
-        if (Directory.Exists(dxvkPath32))
-        {
-            files = Directory.GetFiles(dxvkPath32);
-
-            foreach (string fileName in files)
-            {
-                File.Copy(fileName, Path.Combine(syswow64, Path.GetFileName(fileName)), true);
-            }
-        }
-    }
 }
