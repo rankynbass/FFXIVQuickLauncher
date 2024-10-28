@@ -132,7 +132,7 @@ public class CompatibilityTools
             {
                 InstallToGameFolder(DLSS.NvidiaWineFolder, new List<string>{"nvngx.dll", "_nvngx.dll"});
             }
-            await InstallToPrefix(dxvkDirectory, DLSS.FolderName, DLSS.DownloadUrl, "DXVK-Nvapi").ConfigureAwait(false);
+            await InstallToPrefix(dxvkDirectory, DLSS.FolderName, DLSS.DownloadUrl, "DXVK-Nvapi", false).ConfigureAwait(false);
         }
 
         IsToolReady = true;
@@ -178,7 +178,8 @@ public class CompatibilityTools
         File.Delete(tempPath);
     }
 
-    internal async Task InstallToPrefix(DirectoryInfo toolfolder, string folder, string url, string tool)
+    // tgzHasFolder is true if the tarball to download has a toplevel directory, and false if it doesn't (dxvk-nvapi)
+    internal async Task InstallToPrefix(DirectoryInfo toolfolder, string folder, string url, string tool, bool tgzHasFolder = true)
     {
         if (string.IsNullOrEmpty(folder))
         {
@@ -190,7 +191,9 @@ public class CompatibilityTools
         if (!Directory.Exists(toolPath))
         {
             Log.Information($"{tool} does not exist, downloading {url}");
-            await CompatibilityTools.DownloadTool(toolfolder, url).ConfigureAwait(false);
+            var tgzFolder = tgzHasFolder ? toolfolder : new DirectoryInfo(Path.Combine(toolfolder.FullName, folder));
+            if (!tgzFolder.Exists) tgzFolder.Create();
+            await CompatibilityTools.DownloadTool(tgzFolder, url).ConfigureAwait(false);
         }
 
         var system32 = Path.Combine(Runner.Prefix.FullName, "drive_c", "windows", "system32");
