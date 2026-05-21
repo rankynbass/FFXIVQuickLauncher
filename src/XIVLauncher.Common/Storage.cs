@@ -23,7 +23,7 @@ public class Storage
         else
         {
             // Keeping the old path on MacOS for now.
-            this.Root = new DirectoryInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), $".{appName}"));
+            this.Root = new DirectoryInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), $".{appName}"));
         }
 
         if (!string.IsNullOrEmpty(overridePath))
