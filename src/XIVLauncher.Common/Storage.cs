@@ -14,14 +14,9 @@ public class Storage
         {
             this.Root = new DirectoryInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), appName));
         }
-        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)  || RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-        {
-            // Use XDG_DATA_HOME on Linux.
-            this.Root = new DirectoryInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), appName));
-        }
         else
         {
-            this.Root = new DirectoryInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), $".{appName}"));
+            this.Root = new DirectoryInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), appName));
         }
 
         if (!string.IsNullOrEmpty(overridePath))
